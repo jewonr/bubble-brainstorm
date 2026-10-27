@@ -14,8 +14,12 @@
 
 ## 분류 방식
 
-- claude.ai 아티팩트로 열면 Claude가 분류합니다.
-- GitHub Pages처럼 일반 웹페이지로 열면 Claude를 부를 수 없어서, 겹치는 단어를 기준으로 묶는 방식으로 대신합니다. 결과는 끌어서 바로잡을 수 있습니다.
+- **claude.ai 아티팩트로 열면** 보는 사람의 Claude 계정으로 Claude가 분류합니다.
+- **GitHub Pages에서는** 주제 줄 오른쪽 ‘Claude 연결’에 각자의 Anthropic API 키를 넣으면 Claude가 분류합니다.
+  - 키는 그 브라우저의 localStorage에만 저장되고, 공식 SDK(`vendor/anthropic-sdk-0.133.0.js`)를 통해 `api.anthropic.com`으로만 보내집니다. 공용 컴퓨터에서는 쓰지 마세요.
+  - 모델은 `claude-opus-5-5`, effort `low`, JSON 스키마 구조화 출력을 씁니다. 안전 분류기가 거절하면 `fallbacks: "default"`로 서버에서 다른 모델이 이어받습니다.
+  - 비용은 키 주인에게 청구됩니다.
+- 키가 없거나 호출이 실패하면 겹치는 단어를 기준으로 묶는 간이 분류로 대신합니다. 결과는 끌어서 바로잡을 수 있습니다.
 
 ## 파일
 
@@ -25,6 +29,7 @@
 | `build.py` | 폰트를 넣어 `index.html`을 만듭니다. |
 | `index.html` | 빌드 결과. GitHub Pages가 이 파일을 보여 줍니다. |
 | `fonts/` | SUIT SemiBold 웹폰트와 라이선스(SIL OFL 1.1). |
+| `vendor/` | 브라우저용으로 묶은 Anthropic TypeScript SDK 0.133.0과 라이선스(MIT). |
 
 ## 수정 후 배포
 
