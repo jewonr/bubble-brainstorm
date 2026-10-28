@@ -337,28 +337,24 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   const EXAMPLE_IDEAS = [
     '우리가 사육사가 돼서 동물을 돌보는 거야',
     '사자, 펭귄, 코끼리가 나와',
-    '밤이 되면 동물원 문을 닫아',
+    '동물원을 위에서 내려다보는 지도',
     '먹이를 주거나 우리를 청소할 수 있어',
     '배가 고프면 동물이 화를 내',
+    '밤이 되면 화면이 어두워져',
     '비가 오면 동물들이 숨어',
     '코끼리가 탈출하면 어떡해?',
-    '아기 동물이 태어나',
-    '동물들이 모두 행복하면 성공',
-    '펭귄은 차가운 물이 있어야 해',
+    '버튼은 크고 알록달록하게',
     '손님이 많이 오면 돈을 벌어',
+    '동물마다 울음소리가 나면 좋겠어',
     '먹이 값은 얼마일까?',
   ];
-  // A simulation planning frame, in the order kids usually fill it in. `hint` is what the AI reads.
+  // Two main boxes for planning a simulation program — what it does and how it looks — plus open
+  // questions. 기타 only appears when something fits none of them. `hint` is what the AI reads.
   const CATEGORIES = [
-    { id: 'goal', name: '주제·목표', desc: '무엇을 흉내 내고, 무엇을 알아볼까?', hint: '무엇을 시뮬레이션하고, 무엇을 알아보거나 이루고 싶은지' },
-    { id: 'character', name: '등장인물', desc: '누가, 무엇이 나올까?', hint: '누가 또는 무엇이 나오는지 (사람, 동물, 물건, 맡을 역할)' },
-    { id: 'place', name: '배경', desc: '어디서, 언제 일어날까?', hint: '어디서, 언제 일어나는지 (장소, 시간, 날씨 같은 환경)' },
-    { id: 'action', name: '행동', desc: '무엇을 할 수 있을까?', hint: '등장인물이나 참여자가 할 수 있는 일, 고를 수 있는 선택' },
-    { id: 'rule', name: '규칙', desc: '무엇이 어떻게 변할까?', hint: '무엇이 어떻게 변하는지, "~하면 ~된다" 같은 원인과 결과, 꼭 지켜야 할 조건' },
-    { id: 'event', name: '사건', desc: '갑자기 무슨 일이 생길까?', hint: '갑자기 일어나는 일, 상황을 바꾸는 사건' },
-    { id: 'result', name: '결과', desc: '어떻게 끝날까?', hint: '어떻게 끝나는지, 성공과 실패, 점수나 보상' },
-    { id: 'question', name: '궁금한 점', desc: '더 알아볼 것은?', hint: '더 조사하거나 함께 정해야 할 질문' },
-    { id: 'other', name: '기타', desc: '아직 자리를 못 찾은 생각', hint: '위 어디에도 맞지 않는 것' },
+    { id: 'function', name: '기능', desc: '무엇을 할 수 있고, 어떻게 움직일까?', hint: '프로그램이 무엇을 하고 어떻게 움직이는지: 참여자가 할 수 있는 조작과 선택, "~하면 ~된다" 같은 규칙, 일어나는 사건, 점수·성공·실패 같은 결과' },
+    { id: 'design', name: '디자인', desc: '어떻게 보이고, 어떤 소리가 날까?', hint: '화면에 무엇이 어떻게 보이고 들리는지: 등장인물과 배경의 모습, 색, 화면 구성, 버튼과 글자, 소리와 음악' },
+    { id: 'question', name: '궁금한 점', desc: '더 알아보거나 정할 것은?', hint: '아직 정하지 못했거나 더 알아봐야 할 질문 (물음표로 끝나는 말)' },
+    { id: 'other', name: '기타', desc: '아직 자리를 못 찾은 생각', hint: '기능이나 디자인으로 보기 어려운 것 (주제 제안, 느낌, 그 밖의 말)' },
   ];
   const CAT_IDS = CATEGORIES.map(c => c.id);
   // Codes after which this view can never use Claude, so the page stops offering AI re-runs.
@@ -420,8 +416,11 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
       const old = readJSON(OLD_STORE_KEY);
       if (old && Array.isArray(old.ideas) && !old.example) saved = { topic: old.topic || '', ideas: old.ideas, nextId: old.nextId };
     }
+    if (saved && saved.example) saved = null;
     if (saved && Array.isArray(saved.ideas)) {
+      const stale = saved.ideas.some(i => i && i.cat && !CAT_IDS.includes(i.cat));
       state = Object.assign(blank(), saved);
+      if (stale) state.phase = 'free';
       state.ideas = state.ideas
         .filter(i => i && typeof i.text === 'string' && Number.isFinite(i.id))
         .map(i => ({ id: i.id, text: i.text, keep: i.keep !== false, cat: CAT_IDS.includes(i.cat) ? i.cat : null }));
@@ -777,22 +776,33 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     return zones.map(z => ({ id: z.id, name: z.name, desc: z.desc, bodies: groups.get(z.id) || [] }));
   }
 
-  // Grid of boxes (rows share a height); bubbles wrap left to right inside each box.
+  // Grid of boxes (rows share a height); 새 아이디어 and 빼둔 아이디어 take a full row, and a
+  // short last row stretches so no box sits next to an empty gap.
+  // Bubbles wrap left to right inside each box.
   function layoutBoard({ stagger = false } = {}) {
     const W = els.stage.clientWidth, H = els.stage.clientHeight;
     if (!W) return;
     const pad = W < 520 ? 12 : 20, gap = 14;
-    const cols = clamp(Math.floor((W - pad * 2 + gap) / (250 + gap)), 1, 3);
-    const zoneW = Math.floor((W - pad * 2 - gap * (cols - 1)) / cols);
-    const inner = zoneW - ZONE_PAD * 2;
-    els.stage.style.setProperty('--zone-inner', inner + 'px');
+    const cols = clamp(Math.floor((W - pad * 2 + gap) / (300 + gap)), 1, 2);
+    const colW = Math.floor((W - pad * 2 - gap * (cols - 1)) / cols);
+    const fullW = W - pad * 2;
+    els.stage.style.setProperty('--zone-inner', colW - ZONE_PAD * 2 + 'px');
     measureAll();
     const zones = visibleZones();
+    const rows = [];
+    for (const z of zones) {
+      const wide = z.id === 'new' || z.id === 'dropped';
+      const last = rows[rows.length - 1];
+      if (!wide && last && !last.wide && last.zones.length < cols) last.zones.push(z);
+      else rows.push({ wide, zones: [z] });
+    }
     let top = headBottom(pad), order = 0;
     zoneRects = [];
-    for (let r = 0; r < zones.length; r += cols) {
-      const row = zones.slice(r, r + cols);
-      for (const z of row) {
+    for (const row of rows) {
+      const n = row.zones.length;
+      const w = row.wide ? fullW : Math.floor((fullW - gap * (n - 1)) / n);
+      for (const z of row.zones) {
+        const inner = w - ZONE_PAD * 2;
         let x = 0, y = 0, lineH = 0;
         z.slots = [];
         for (const p of z.bodies) {
@@ -803,9 +813,9 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
         }
         z.contentH = z.bodies.length ? y + lineH : 30;
       }
-      const rowH = Math.max(...row.map(z => HEAD_H + z.contentH + ZONE_PAD));
-      row.forEach((z, c) => {
-        const rect = { id: z.id, x: pad + c * (zoneW + gap), y: top, w: zoneW, h: rowH };
+      const rowH = Math.max(...row.zones.map(z => HEAD_H + z.contentH + ZONE_PAD));
+      row.zones.forEach((z, c) => {
+        const rect = { id: z.id, x: pad + c * (w + gap), y: top, w, h: rowH };
         zoneRects.push(rect);
         for (const { p, x, y } of z.slots) {
           p.tx = rect.x + ZONE_PAD + x;
@@ -1111,13 +1121,14 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
       ...CATEGORIES.map(c => `- ${c.id} (${c.name}): ${c.hint}`),
       '',
       '- 모든 항목을 정확히 한 범주에 넣으세요. 항목은 번호로만 가리키세요.',
+      '- 기능과 디자인을 먼저 고려하세요. other는 둘 다 아닐 때만 쓰세요.',
       '- 아이들 말이라 짧거나 어색할 수 있어요. 뜻을 헤아려 분류하세요.',
       '',
       '항목:',
       ...list.map((it, i) => `${i + 1}. ${it.text}`),
       '',
       'JSON 하나만 답하세요. 형식:',
-      '{"groups":[{"category":"rule","items":[1,4]}]}',
+      '{"groups":[{"category":"function","items":[1,4]}]}',
     ].join('\n');
   }
 
@@ -1146,26 +1157,31 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     return readAssignments(data, list);
   }
 
-  // Fallback when no AI is reachable: score each idea against cue words kids tend to use.
-  const CUES = {
-    question: [/\?\s*$/, /궁금/, /왜/, /어떻게/, /얼마/, /몇 /, /[을를]까\s*$|일까|뭘까/],
-    event: [/갑자기/, /사건/, /이벤트/, /사고/, /탈출/, /태어나/, /폭풍|태풍|지진|홍수|불이 나/, /비가 오|눈이 오/, /생기면|생겨/, /일어나/],
-    result: [/성공/, /실패/, /이기|이겨|승리/, /지면|패배/, /끝나|끝이/, /점수/, /보상/, /행복하면/],
-    rule: [/[가-힣]면(\s|$)/, /해야|있어야|돼야/, /안 ?돼|못 ?해/, /규칙/, /조건/, /필요/, /마다/, /늘어|줄어|변해/],
-    action: [/할 수 있/, /주거나|줄 수|주기/, /만들/, /고르|선택/, /청소/, /팔아|사서|모으/, /움직/, /돌봐|돌보/],
-    goal: [/시뮬레이션/, /목표/, /알아보/, /주제/, /배우/, /우리가 .*(돼서|되어)/, /거야\s*$/],
-    place: [/에서/, /배경/, /장소/, /동네|마을|도시|학교|숲|바다|우주|섬|공원|동물원|집/, /밤|낮|아침|저녁|여름|겨울/],
-    character: [/등장/, /주인공/, /캐릭터/, /사람|학생|선생님|친구|손님|사육사|의사/, /사자|펭귄|코끼리|강아지|고양이|로봇|개미|물고기/, /나와|나오/],
-  };
+  // Fallback when no AI is reachable: a question mark settles it; otherwise count cue words kids
+  // tend to use for how things look or sound against cue words for what happens. Ties go to 디자인.
+  const QUESTION_CUES = [/\?\s*$/, /궁금/, /얼마일까|뭘까|몇 개|몇 명/, /^왜/];
+  const DESIGN_CUES = [
+    /색|알록|빨간|파란|노란|초록|분홍|하얀|검은|까만/, /보여|보이게|보이는|모양|그림|화면|내려다|지도/,
+    /버튼|글씨|글자|아이콘|크게|작게|크고|작고/, /예쁘|귀엽|멋지|반짝|하트/, /소리|음악|노래|효과음/,
+    /어두워|밝아|밝게|어둡게/, /캐릭터|배경|옷/, /나와|나오|등장/,
+  ];
+  const FUNCTION_CUES = [
+    /[가-힣]면(\s|$)/, /할 수 있|할 수도/, /누르|클릭|터치|고르|선택/, /움직|달리|날아|숨어|도망|탈출/,
+    /점수|돈|레벨|시간|저장/, /먹이|청소|돌보|돌봐|키우|만들|모으|팔|사서/, /이기|이겨|지면|성공|실패|끝나/,
+    /늘어|줄어|변해|화를|태어나|아파/,
+  ];
+  const countCues = (cues, text) => cues.reduce((n, re) => n + (re.test(text) ? 1 : 0), 0);
   function localClassify(list) {
     const out = new Map();
     for (const idea of list) {
-      let best = 'other', bestScore = 0;
-      for (const [cat, cues] of Object.entries(CUES)) {
-        const score = cues.reduce((n, re) => n + (re.test(idea.text) ? 1 : 0), 0);
-        if (score > bestScore) { best = cat; bestScore = score; }
+      const t = idea.text;
+      let cat = 'other';
+      if (countCues(QUESTION_CUES, t)) cat = 'question';
+      else {
+        const d = countCues(DESIGN_CUES, t), f = countCues(FUNCTION_CUES, t);
+        if (d || f) cat = d >= f ? 'design' : 'function';
       }
-      out.set(idea.id, best);
+      out.set(idea.id, cat);
     }
     return out;
   }
