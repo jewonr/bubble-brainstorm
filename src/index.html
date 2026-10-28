@@ -8,7 +8,8 @@
 @font-face{font-family:'SUIT-600';font-style:normal;font-weight:100 900;font-display:swap;src:url(data:font/woff2;base64,__SUIT_WOFF2__) format('woff2')}
 </style>
 <style>
-/* Layout: one centered column like the reference app — nav, a "주제:" line, a 20px-radius message card, and the 70px pill input under it. */
+/* Layout: one centered column like the reference app — nav, a "주제:" line, a 20px-radius board card, and the 70px pill input under it.
+   The board holds floating bubbles; "정리하기" turns it into planning boxes the bubbles fly into. */
 :root {
   --bg: #FFFFFF;
   --card: #FFFFFF;
@@ -23,16 +24,15 @@
   --line: rgba(100, 100, 100, 0.15);
   --line-strong: rgba(100, 100, 100, 0.3);
   --wash: rgba(100, 100, 100, 0.07);
+  --zone-bg: #F6F7F9;
+  --zone-new: rgba(25, 115, 221, 0.45);
   --shadow: rgba(100, 100, 100, 0.05);
   --lift: rgba(30, 40, 60, 0.18);
   --focus: rgba(25, 115, 221, 0.45);
   --faded-ink: #0B4A92;
-  /* Korean faces only, so Latin always comes from the same face as Hangul; a Latin system font here
-     (-apple-system) would set English in SF while Korean fell back to Apple SD Gothic Neo. */
-  --font: 'SUIT-600', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font: 'SUIT-600', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   --msg: 22px;
-  --emoji: 40px;
-  --emoji-gap: 15px;
+  --group-scale: 0.74;
   --pill-h: 70px;
   --send: 50px;
 }
@@ -51,6 +51,8 @@
     --line: rgba(160, 160, 170, 0.18);
     --line-strong: rgba(160, 160, 170, 0.34);
     --wash: rgba(255, 255, 255, 0.07);
+    --zone-bg: #16171A;
+    --zone-new: rgba(77, 152, 240, 0.55);
     --shadow: rgba(0, 0, 0, 0.5);
     --lift: rgba(0, 0, 0, 0.55);
     --focus: rgba(77, 152, 240, 0.55);
@@ -72,6 +74,8 @@
   --line: rgba(160, 160, 170, 0.18);
   --line-strong: rgba(160, 160, 170, 0.34);
   --wash: rgba(255, 255, 255, 0.07);
+  --zone-bg: #16171A;
+  --zone-new: rgba(77, 152, 240, 0.55);
   --shadow: rgba(0, 0, 0, 0.5);
   --lift: rgba(0, 0, 0, 0.55);
   --focus: rgba(77, 152, 240, 0.55);
@@ -110,9 +114,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
 .nav-side.end { justify-content: flex-end; }
 .nav-center { text-align: center; }
 .nav-title { font-size: 17px; font-weight: 600; letter-spacing: -0.3px; }
-.steps { list-style: none; display: flex; justify-content: center; gap: 6px; margin-top: 3px; font-size: 12px; color: var(--muted); }
-.steps li + li::before { content: "›"; margin-right: 6px; color: var(--muted); }
-.steps li[aria-current="step"] { color: var(--blue); }
+.nav-sub { margin-top: 3px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .text-btn {
   border: 0; background: none; color: var(--blue); font-size: 17px; padding: 8px 2px;
   cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
@@ -134,44 +136,39 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
 .key-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 4px 2px; font-size: 14px; color: var(--blue); cursor: pointer; white-space: nowrap; }
 .key-btn.is-on::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
 
-/* ---------- card ---------- */
+/* ---------- card + board ---------- */
 .card {
   position: relative; flex: 1; min-height: 240px;
   border: 1px solid var(--line); border-radius: 20px; background: var(--card);
   box-shadow: var(--shadow) 0px 15px 30px; overflow: hidden;
 }
-.view { position: absolute; inset: 0; }
-.scroll { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
-.scroll::-webkit-scrollbar { display: none; }
-.review, .output { padding: 50px 25px; display: flex; flex-direction: column; gap: 15px; }
+.stage { position: absolute; inset: 0; overflow: hidden; overscroll-behavior: contain; scrollbar-width: none; }
+.stage::-webkit-scrollbar { display: none; }
+.stage.is-grouped { overflow-y: auto; }
+.board { position: relative; width: 100%; min-height: 100%; }
+.board-head { position: absolute; top: 16px; left: 20px; right: 20px; z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--wash); font-size: 13px; color: var(--muted); }
+.notice { max-width: 62ch; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.stage-empty { position: absolute; left: 24px; right: 24px; top: 46%; text-align: center; font-size: 17px; color: var(--muted); pointer-events: none; }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1.2s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes blink { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-2px); } }
 
-/* ---------- messages (reference: 25px, -0.5px, 20px padding, 30px radius) ---------- */
-.bot-row { display: flex; align-items: center; min-width: 0; }
-.emoji {
-  flex: none; width: 1.15em; margin-right: var(--emoji-gap); font-size: var(--emoji); line-height: 1; text-align: center;
-  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-}
-.emoji.spacer { visibility: hidden; }
+/* ---------- bubbles (reference: -0.5px tracking, 0.8em padding, 30px radius) ---------- */
 .bubble {
   display: block; width: max-content; max-width: 100%; border-radius: 30px; padding: 0.8em;
   font-size: var(--msg); line-height: 1.3; letter-spacing: -0.5px; overflow-wrap: anywhere; text-align: left;
 }
-.bot-row .bubble { flex: 0 1 auto; min-width: 0; }
 .bubble.blue { background: var(--blue); color: var(--on-blue); }
-.bubble.gray { background: var(--gray); color: var(--on-gray); }
-.tip { font-size: 14px; line-height: 1.55; color: var(--muted); }
-.indent { padding-left: calc(var(--emoji) * 1.15 + var(--emoji-gap)); }
-
-/* ---------- stage: floating bubbles ---------- */
-.stage { overflow: hidden; }
-.pinned { position: absolute; top: 24px; left: 24px; right: 24px; z-index: 2; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-.stage-empty { position: absolute; left: 24px; right: 24px; top: 55%; text-align: center; font-size: 17px; color: var(--muted); }
 .float {
   position: absolute; left: 0; top: 0; z-index: 1; max-width: min(80%, 20em);
   font-size: calc(var(--msg) * var(--float-scale, 1));
   border: 0; background: none; padding: 0; border-radius: 30px; cursor: grab;
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; will-change: transform;
 }
+.stage.is-grouped .float { font-size: calc(var(--msg) * var(--group-scale)); max-width: var(--zone-inner, 260px); }
 .float .bubble { width: auto; font-size: inherit; transition: background-color .6s, color .6s, box-shadow .2s; }
 .float .bubble.blue { background: color-mix(in srgb, var(--blue) var(--fresh, 100%), var(--card)); }
 .float.is-faded:not(.is-off) .bubble { color: var(--faded-ink); }
@@ -191,85 +188,26 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   position: absolute; left: 0; top: 0; z-index: 6; display: flex; gap: 2px; padding: 5px;
   background: var(--card); border: 1px solid var(--line); border-radius: 999px; box-shadow: 0 10px 30px var(--lift);
 }
-.tapback button { border: 0; background: none; border-radius: 999px; padding: 8px 15px; font-size: 15px; color: var(--fg); cursor: pointer; }
+.tapback button { border: 0; background: none; border-radius: 999px; padding: 8px 15px; font-size: 15px; color: var(--fg); cursor: pointer; white-space: nowrap; }
 .tapback button:hover { background: var(--wash); }
 .tapback .danger { color: var(--danger); }
 
-.typing { display: inline-flex; align-items: center; gap: 6px; height: 1.3em; padding: 0 .2em; }
-.typing i { width: .36em; height: .36em; border-radius: 50%; background: var(--muted); animation: blink 1.2s ease-in-out infinite; }
-.typing i:nth-child(2) { animation-delay: .15s; }
-.typing i:nth-child(3) { animation-delay: .3s; }
-@keyframes blink { 0%, 60%, 100% { opacity: .35; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
-
-/* ---------- review: groups with select circles ---------- */
-.intro { display: flex; flex-direction: column; gap: 15px; }
-.groups { display: flex; flex-direction: column; gap: 18px; margin-top: 14px; }
-.group { display: flex; flex-direction: column; gap: 15px; padding: 16px 12px; border-radius: 20px; transition: background-color .15s, box-shadow .15s; }
-.group.is-over { background: var(--wash); box-shadow: inset 0 0 0 2px var(--blue); }
-.group-head { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; }
-.group-name {
-  max-width: 100%; border: 0; border-radius: 8px; background: transparent; padding: 3px 8px;
-  font-size: 17px; letter-spacing: -0.3px; text-align: center; color: var(--fg); outline: none; cursor: text;
+/* ---------- planning boxes ---------- */
+.zones { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.zone {
+  position: absolute; left: 0; top: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--zone-bg);
+  transition: transform .5s cubic-bezier(.2, .8, .2, 1), width .5s cubic-bezier(.2, .8, .2, 1), height .5s cubic-bezier(.2, .8, .2, 1),
+    opacity .35s ease, border-color .15s, box-shadow .15s;
 }
-.group-name:hover, .group-name:focus { background: var(--wash); }
-.group-meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; font-size: 13px; line-height: 1.5; color: var(--muted); }
-.group-meta span + span::before { content: "·"; margin-right: 6px; }
-.inline-btn { border: 0; background: none; padding: 2px 4px; font-size: 14px; color: var(--blue); cursor: pointer; }
-.row { display: flex; align-items: center; justify-content: space-between; gap: 15px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.row .bubble { flex: 0 1 auto; min-width: 0; cursor: pointer; transition: background-color .2s, color .2s, opacity .2s; }
-.row.is-off .bubble { background: var(--gray); color: var(--on-gray); opacity: .5; text-decoration: line-through; text-decoration-thickness: 2px; }
-.row.is-dragging .bubble { opacity: .2; }
-.check {
-  flex: none; width: 28px; height: 28px; padding: 0; border-radius: 50%;
-  border: 2px solid var(--line-strong); background: transparent; display: grid; place-items: center; cursor: pointer;
-  transition: background-color .15s, border-color .15s;
-}
-.check svg { width: 18px; height: 18px; fill: none; stroke: var(--on-blue); stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity .15s; }
-.check[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); }
-.check[aria-pressed="true"] svg { opacity: 1; }
-.drop-hint { border: 1.5px dashed var(--line-strong); border-radius: 20px; padding: 18px; text-align: center; font-size: 14px; color: var(--muted); }
-.add-group {
-  align-self: center; margin-top: 4px; border: 1.5px dashed var(--line-strong); background: none; border-radius: 999px;
-  padding: 10px 18px; font-size: 15px; color: var(--muted); cursor: pointer;
-}
-.add-group:hover { color: var(--blue); border-color: var(--blue); }
-.ghost { position: fixed; left: 0; top: 0; z-index: 50; margin: 0; pointer-events: none; box-shadow: 0 16px 34px var(--lift); }
-.review.is-entering .intro,
-.review.is-entering .group-head,
-.review.is-entering .check,
-.review.is-entering .drop-hint,
-.review.is-entering .add-group { animation: fadein .45s .3s ease-out backwards; }
-@keyframes fadein { from { opacity: 0; } }
-
-/* ---------- output ---------- */
-.output > * { animation: fadein .3s ease-out backwards; }
-.opts { display: flex; flex-direction: column; gap: 12px; padding-top: 10px; }
-.opts-label { font-size: 13px; color: var(--muted); }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chip { border: 1px solid var(--line-strong); background: transparent; border-radius: 999px; padding: 8px 14px; font-size: 15px; color: var(--fg); cursor: pointer; }
-.chip[aria-checked="true"] { background: var(--blue); border-color: var(--blue); color: var(--on-blue); }
-.custom-req { width: 100%; border: 1px solid var(--line-strong); border-radius: 18px; padding: 12px 16px; background: transparent; font-size: 16px; color: var(--fg); outline: none; }
-.custom-req:focus { border-color: var(--blue); }
-.switch { display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer; }
-.switch input {
-  appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 46px; height: 28px;
-  border-radius: 999px; background: var(--line-strong); cursor: pointer; transition: background-color .2s;
-}
-.switch input::after {
-  content: ""; position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%;
-  background: var(--on-blue); box-shadow: 0 2px 4px var(--lift); transition: transform .2s;
-}
-.switch input:checked { background: var(--green); }
-.switch input:checked::after { transform: translateX(18px); }
-.sent { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: 12px; }
-.prompt-bubble {
-  display: block; width: 100%; border: 0; border-radius: 26px; padding: 20px 22px; resize: none; overflow: hidden;
-  background: var(--blue); color: var(--on-blue); caret-color: var(--on-blue);
-  font-size: 17px; line-height: 1.65; letter-spacing: -0.3px; outline: none;
-}
-.prompt-bubble:focus-visible { box-shadow: 0 0 0 3px var(--focus); }
-.prompt-bubble::selection { background: rgba(255, 255, 255, 0.35); }
-.receipt { padding-right: 8px; font-size: 13px; color: var(--muted); }
+.zone.is-entering, .zone.is-leaving { opacity: 0; }
+.zone.is-over { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.zone-new { border-color: var(--zone-new); }
+.zone-dropped { border-style: dashed; border-color: var(--line-strong); background: transparent; }
+.zone-head { position: absolute; top: 12px; left: 14px; right: 14px; display: flex; align-items: baseline; gap: 8px; }
+.zone-name { font-size: 16px; letter-spacing: -0.3px; color: var(--fg); }
+.zone-count { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.zone-desc { position: absolute; top: 36px; left: 14px; right: 14px; font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zone-empty { position: absolute; top: 64px; left: 14px; right: 14px; font-size: 13px; color: var(--muted); opacity: .7; }
 
 /* ---------- dock: the reference's 70px input pill and round send button ---------- */
 .dock { flex: none; padding-top: 14px; }
@@ -285,11 +223,6 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
 .send path { stroke: var(--on-blue); }
 .send:disabled { opacity: .3; cursor: default; }
 .send:not(:disabled):active { transform: scale(.92); }
-.dock-text {
-  min-width: 0; margin-left: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 18px; letter-spacing: -0.3px; color: var(--muted); font-variant-numeric: tabular-nums;
-}
-.pill-btn.big { height: var(--send); padding: 0 24px; font-size: 18px; }
 
 /* ---------- API key sheet (pages outside the claude.ai viewer) ---------- */
 .sheet { margin: auto; width: min(440px, calc(100% - 32px)); padding: 0; border: 1px solid var(--line); border-radius: 20px; background: var(--card); color: var(--fg); box-shadow: 0 20px 50px var(--lift); }
@@ -305,18 +238,14 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
 .sheet-actions .danger { margin-left: auto; color: var(--danger); }
 
 @media (max-width: 720px) {
-  :root { --msg: 17px; --emoji: 28px; --emoji-gap: 10px; --pill-h: 56px; --send: 40px; }
+  :root { --msg: 17px; --group-scale: 0.86; --pill-h: 56px; --send: 40px; }
   .app { gap: 12px; padding-block: 10px 12px; }
   .nav-title { font-size: 16px; }
-  .review, .output { padding: 28px 14px; }
-  .pinned { top: 16px; left: 14px; right: 14px; }
+  .board-head { top: 12px; left: 12px; right: 12px; }
   .bubble { border-radius: 24px; }
   .pill { gap: 10px; padding: 7px; }
   .pill input { margin-left: 8px; font-size: 18px; }
   .dock { padding-top: 6px; }
-  .dock-text { margin-left: 8px; font-size: 15px; }
-  .pill-btn.big { padding: 0 18px; font-size: 16px; }
-  .prompt-bubble { padding: 16px 18px; font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -328,7 +257,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     <div class="nav-side"><button class="text-btn" id="navLeft" type="button"></button></div>
     <div class="nav-center">
       <h1 class="nav-title">브레인스토밍</h1>
-      <ol class="steps" id="steps" aria-label="진행 단계"><li>모으기</li><li>고르기</li><li>프롬프트</li></ol>
+      <p class="nav-sub" id="navSub"></p>
     </div>
     <div class="nav-side end"><button class="pill-btn" id="navRight" type="button"></button></div>
   </header>
@@ -340,35 +269,30 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   </div>
 
   <main class="card" id="card">
-    <section class="view stage" id="stage" aria-label="아이디어 말풍선">
-      <div class="pinned" id="pinned">
-        <div class="bot-row"><span class="emoji" aria-hidden="true">🤖</span><div class="bubble gray" id="pinnedMsg"></div></div>
-        <p class="tip indent" id="pinnedTip"></p>
+    <section class="stage" id="stage" aria-label="아이디어 말풍선">
+      <div class="board" id="board">
+        <div class="board-head" id="boardHead">
+          <p class="chip" id="exampleTag" hidden>예시 아이디어예요 · 직접 입력하면 사라져요</p>
+          <p class="chip" id="thinking" hidden><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>비슷한 것끼리 묶는 중</p>
+          <p class="notice" id="notice" hidden></p>
+        </div>
+        <div class="zones" id="zones" aria-hidden="true"></div>
+        <div class="tapback" id="tapback" role="menu" hidden>
+          <button type="button" role="menuitem" data-act="toggle" id="tapToggle">빼기</button>
+          <button type="button" role="menuitem" data-act="edit">수정</button>
+          <button type="button" role="menuitem" data-act="delete" class="danger">삭제</button>
+        </div>
       </div>
       <p class="stage-empty" id="stageEmpty" hidden>아래 입력창에 첫 아이디어를 적어 보세요</p>
-      <div class="tapback" id="tapback" role="menu" hidden>
-        <button type="button" role="menuitem" data-act="edit">수정</button>
-        <button type="button" role="menuitem" data-act="delete" class="danger">삭제</button>
-      </div>
     </section>
-    <section class="view review scroll" id="review" aria-label="분류된 아이디어" hidden></section>
-    <section class="view output scroll" id="output" aria-label="완성된 프롬프트" hidden></section>
   </main>
 
   <footer class="dock">
-    <div class="pill" id="composer">
+    <div class="pill">
       <input id="ideaInput" type="text" maxlength="200" autocomplete="off" enterkeyhint="send" placeholder="아이디어 입력" aria-label="아이디어 입력">
       <button class="send" id="sendBtn" type="button" aria-label="보내기" disabled>
         <svg viewBox="0 0 50 50" aria-hidden="true"><circle cx="25" cy="25" r="25"/><path d="M25 35.8854V14.0104" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.8854 23.125L25 14.0104L34.1146 23.125" fill="none" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-    </div>
-    <div class="pill" id="reviewDock" hidden>
-      <p class="dock-text" id="reviewSummary"></p>
-      <button class="pill-btn big" id="toOutputBtn" type="button">프롬프트 만들기</button>
-    </div>
-    <div class="pill" id="outputDock" hidden>
-      <p class="dock-text" id="outputCount"></p>
-      <button class="pill-btn big" id="copyBtn" type="button">복사하기</button>
     </div>
   </footer>
   <p class="sr-only" id="live" aria-live="polite"></p>
@@ -376,7 +300,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   <dialog class="sheet" id="keySheet" aria-labelledby="keyTitle">
     <form class="sheet-body" id="keyForm" novalidate>
       <h2 class="sheet-title" id="keyTitle">Gemini로 분류하기</h2>
-      <p class="sheet-text">Google Gemini API 키를 넣으면 Gemini가 아이디어를 비슷한 것끼리 묶어요. 키는 이 브라우저에만 저장되고 Google API로만 보내져요.</p>
+      <p class="sheet-text">Google Gemini API 키를 넣으면 Gemini가 아이디어를 알맞은 칸에 나눠요. 키는 이 브라우저에만 저장되고 Google API로만 보내져요.</p>
       <input class="sheet-input" id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="AIza..." aria-label="Gemini API 키">
       <p class="sheet-hint is-error" id="keyError" hidden></p>
       <p class="sheet-hint">키는 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>에서 무료로 만들 수 있어요. 무료 등급에서는 입력한 내용이 Google 서비스 개선에 쓰일 수 있어요. 공용 컴퓨터에서는 쓰지 마세요.</p>
@@ -393,50 +317,55 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
 (() => {
   'use strict';
 
-  const STORE_KEY = 'bubble-brainstorm:v1';
-  const EXAMPLE_TOPIC = '주말에만 여는 동네 책방 살리기';
+  const STORE_KEY = 'bubble-brainstorm:v2';
+  const OLD_STORE_KEY = 'bubble-brainstorm:v1';
+  const EXAMPLE_TOPIC = '우리가 만드는 동물원 시뮬레이션';
   const EXAMPLE_IDEAS = [
-    '인스타에 매주 한 줄 책 추천',
-    '독서 모임 정기적으로 열기',
-    '커피도 같이 팔아볼까?',
-    '작가 초청 북토크',
-    '중고책 교환 코너',
-    '근처 초등학교랑 책 읽기 수업',
-    '책방 로고 굿즈 만들기',
-    '월간 책 구독 서비스',
-    '금요일 밤 심야 책방',
-    '지도 앱 리뷰 이벤트',
-    '주인장 추천 블라인드 북',
-    '평일엔 온라인 주문만 받기',
+    '우리가 사육사가 돼서 동물을 돌보는 거야',
+    '사자, 펭귄, 코끼리가 나와',
+    '밤이 되면 동물원 문을 닫아',
+    '먹이를 주거나 우리를 청소할 수 있어',
+    '배가 고프면 동물이 화를 내',
+    '비가 오면 동물들이 숨어',
+    '코끼리가 탈출하면 어떡해?',
+    '아기 동물이 태어나',
+    '동물들이 모두 행복하면 성공',
+    '펭귄은 차가운 물이 있어야 해',
+    '손님이 많이 오면 돈을 벌어',
+    '먹이 값은 얼마일까?',
   ];
-  const REQUESTS = [
-    { id: 'none', label: '정리만', text: '' },
-    { id: 'plan', label: '기획안 쓰기', text: '위 아이디어를 바탕으로 기획안을 작성해 주세요. 목표, 핵심 아이디어, 실행 방법, 기대 효과 순서로 정리해 주세요.' },
-    { id: 'steps', label: '실행 계획', text: '채택한 아이디어를 실행 순서대로 배치하고, 단계마다 할 일과 우선순위를 표로 정리해 주세요.' },
-    { id: 'expand', label: '아이디어 발전', text: '그룹마다 아이디어를 더 구체적으로 발전시키고, 빠진 관점이 있다면 새 아이디어를 2~3개씩 제안해 주세요.' },
-    { id: 'custom', label: '직접 쓰기', text: '' },
+  // A simulation planning frame, in the order kids usually fill it in. `hint` is what the AI reads.
+  const CATEGORIES = [
+    { id: 'goal', name: '주제·목표', desc: '무엇을 흉내 내고, 무엇을 알아볼까?', hint: '무엇을 시뮬레이션하고, 무엇을 알아보거나 이루고 싶은지' },
+    { id: 'character', name: '등장인물', desc: '누가, 무엇이 나올까?', hint: '누가 또는 무엇이 나오는지 (사람, 동물, 물건, 맡을 역할)' },
+    { id: 'place', name: '배경', desc: '어디서, 언제 일어날까?', hint: '어디서, 언제 일어나는지 (장소, 시간, 날씨 같은 환경)' },
+    { id: 'action', name: '행동', desc: '무엇을 할 수 있을까?', hint: '등장인물이나 참여자가 할 수 있는 일, 고를 수 있는 선택' },
+    { id: 'rule', name: '규칙', desc: '무엇이 어떻게 변할까?', hint: '무엇이 어떻게 변하는지, "~하면 ~된다" 같은 원인과 결과, 꼭 지켜야 할 조건' },
+    { id: 'event', name: '사건', desc: '갑자기 무슨 일이 생길까?', hint: '갑자기 일어나는 일, 상황을 바꾸는 사건' },
+    { id: 'result', name: '결과', desc: '어떻게 끝날까?', hint: '어떻게 끝나는지, 성공과 실패, 점수나 보상' },
+    { id: 'question', name: '궁금한 점', desc: '더 알아볼 것은?', hint: '더 조사하거나 함께 정해야 할 질문' },
+    { id: 'other', name: '기타', desc: '아직 자리를 못 찾은 생각', hint: '위 어디에도 맞지 않는 것' },
   ];
+  const CAT_IDS = CATEGORIES.map(c => c.id);
   // Codes after which this view can never use Claude, so the page stops offering AI re-runs.
   const BLOCKING = new Set(['unavailable', 'not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed']);
-  const CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 12.5l3.8 3.8 7.4-8.6"/></svg>';
-  const DRIFT = 16; // px/s, resting float speed
+  const DRIFT = 16;       // px/s, resting float speed
+  const HEAD_H = 62;      // box title + question, above the bubbles
+  const ZONE_PAD = 14;
+  const BUBBLE_GAP = 8;
 
   const $ = id => document.getElementById(id);
   const els = {
-    navLeft: $('navLeft'), navRight: $('navRight'), steps: $('steps'), topic: $('topic'), card: $('card'),
-    stage: $('stage'), pinned: $('pinned'), pinnedMsg: $('pinnedMsg'), pinnedTip: $('pinnedTip'),
-    stageEmpty: $('stageEmpty'), tapback: $('tapback'), review: $('review'), output: $('output'),
-    composer: $('composer'), ideaInput: $('ideaInput'), sendBtn: $('sendBtn'),
-    reviewDock: $('reviewDock'), reviewSummary: $('reviewSummary'), toOutputBtn: $('toOutputBtn'),
-    outputDock: $('outputDock'), outputCount: $('outputCount'), copyBtn: $('copyBtn'), live: $('live'),
-    keyBtn: $('keyBtn'), keySheet: $('keySheet'), keyForm: $('keyForm'), keyInput: $('keyInput'), keyError: $('keyError'),
+    navLeft: $('navLeft'), navRight: $('navRight'), navSub: $('navSub'), topic: $('topic'), keyBtn: $('keyBtn'),
+    stage: $('stage'), board: $('board'), boardHead: $('boardHead'), exampleTag: $('exampleTag'), thinking: $('thinking'),
+    notice: $('notice'), zones: $('zones'), stageEmpty: $('stageEmpty'), tapback: $('tapback'), tapToggle: $('tapToggle'),
+    ideaInput: $('ideaInput'), sendBtn: $('sendBtn'), live: $('live'),
+    keySheet: $('keySheet'), keyForm: $('keyForm'), keyInput: $('keyInput'), keyError: $('keyError'),
     keySave: $('keySave'), keySkip: $('keySkip'), keyClear: $('keyClear'),
   };
   const motionQuery = matchMedia('(prefers-reduced-motion: reduce)');
   const calm = () => motionQuery.matches;
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-  let seq = 0;
-  const uid = () => 'g' + Date.now().toString(36) + (seq++).toString(36);
 
   // Inside the claude.ai viewer Claude classifies through `sample`; anywhere else (GitHub Pages) Gemini
   // does, through the visitor's own Google API key.
@@ -449,17 +378,10 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     for (const [k, v] of Object.entries(props || {})) {
       if (v == null || v === false) continue;
       if (k === 'class') el.className = v;
-      else if (k === 'html') el.innerHTML = v;
       else el.setAttribute(k, v === true ? '' : String(v));
     }
     for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
     return el;
-  }
-
-  function botRow(content, continued = false) {
-    return h('div', { class: 'bot-row' },
-      h('span', { class: 'emoji' + (continued ? ' spacer' : ''), 'aria-hidden': 'true' }, '🤖'),
-      h('div', { class: 'bubble gray' }, content));
   }
 
   function announce(msg) {
@@ -468,24 +390,32 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   }
 
   // ---------- state ----------
-  const blank = () => ({
-    topic: '', ideas: [], groups: [], phase: 'stage', request: 'none', customRequest: '',
-    includeOff: false, example: false, classifiedSig: '', note: '', prompt: null, nextId: 1,
-  });
+  // phase: 'free' (bubbles float), 'classifying', 'grouped' (bubbles sit in planning boxes)
+  // idea.cat: a CATEGORIES id, or null until classified; idea.keep: false sends it to "빼둔 아이디어"
+  const blank = () => ({ topic: '', ideas: [], phase: 'free', example: false, note: '', nextId: 1 });
   let state = blank();
 
+  function readJSON(key) {
+    try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch (_) { return null; }
+  }
+
   function load() {
-    let saved = null;
-    try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (_) { saved = null; }
-    if (saved && Array.isArray(saved.ideas) && Array.isArray(saved.groups)) {
+    let saved = readJSON(STORE_KEY);
+    if (!saved) {
+      // Carry ideas over from the earlier build (its groups don't map onto the planning boxes).
+      const old = readJSON(OLD_STORE_KEY);
+      if (old && Array.isArray(old.ideas) && !old.example) saved = { topic: old.topic || '', ideas: old.ideas, nextId: old.nextId };
+    }
+    if (saved && Array.isArray(saved.ideas)) {
       state = Object.assign(blank(), saved);
-      state.ideas = state.ideas.filter(i => i && typeof i.text === 'string' && Number.isFinite(i.id));
-      state.groups = state.groups.filter(g => g && Array.isArray(g.ids));
-      state.nextId = Math.max(state.nextId, 1, ...state.ideas.map(i => i.id + 1));
-      if (!['stage', 'review', 'output'].includes(state.phase) || !state.groups.length) state.phase = 'stage';
+      state.ideas = state.ideas
+        .filter(i => i && typeof i.text === 'string' && Number.isFinite(i.id))
+        .map(i => ({ id: i.id, text: i.text, keep: i.keep !== false, cat: CAT_IDS.includes(i.cat) ? i.cat : null }));
+      state.nextId = Math.max(Number(state.nextId) || 1, 1, ...state.ideas.map(i => i.id + 1));
+      if (state.phase !== 'grouped' || !state.ideas.length) state.phase = 'free';
     } else {
       state.topic = EXAMPLE_TOPIC;
-      state.ideas = EXAMPLE_IDEAS.map(text => ({ id: state.nextId++, text, keep: true }));
+      state.ideas = EXAMPLE_IDEAS.map(text => ({ id: state.nextId++, text, keep: true, cat: null }));
       state.example = true;
     }
   }
@@ -494,86 +424,60 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      const data = Object.assign({}, state, { phase: state.phase === 'classifying' ? 'stage' : state.phase });
+      const data = Object.assign({}, state, { phase: state.phase === 'classifying' ? 'free' : state.phase });
       try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (_) { /* no storage: this visit only */ }
     }, 200);
   }
 
-  const ideaSig = () => state.ideas.map(i => i.id).join(',');
   const ideaMap = () => new Map(state.ideas.map(i => [i.id, i]));
 
   // ---------- phases ----------
-  const viewFor = phase => (phase === 'review' ? els.review : phase === 'output' ? els.output : els.stage);
-
-  function setPhase(next, { flip = false } = {}) {
-    const from = viewFor(state.phase);
-    const before = flip && !calm() ? captureRects(from) : null;
+  function setPhase(next) {
+    const prev = state.phase;
     closeTapback();
     state.phase = next;
-    const to = viewFor(next);
-    els.stage.hidden = to !== els.stage;
-    els.review.hidden = to !== els.review;
-    els.output.hidden = to !== els.output;
-    if (next === 'review') renderReview();
-    if (next === 'output') renderOutput();
-    if (to !== from && to !== els.stage) to.scrollTop = 0;
-    if (to === els.stage) showStage(); else stopLoop();
+    els.stage.classList.toggle('is-grouped', next === 'grouped');
+    renderHead();
+    if (next === 'grouped') layoutBoard({ stagger: prev !== 'grouped' });
+    else if (prev === 'grouped') releaseBoard();
     renderChrome();
-    if (before && to !== from) {
-      playFlip(to, before);
-      if (to === els.review) {
-        to.classList.add('is-entering');
-        setTimeout(() => to.classList.remove('is-entering'), 900);
-      }
-    }
     save();
   }
 
-  function captureRects(root) {
-    const rects = new Map();
-    if (root.hidden) return rects;
-    for (const el of root.querySelectorAll('[data-bid]')) rects.set(el.dataset.bid, el.getBoundingClientRect());
-    return rects;
-  }
-
-  function playFlip(root, before) {
-    if (calm() || !before.size) return;
-    let i = 0;
-    for (const el of root.querySelectorAll('[data-bid]')) {
-      const a = before.get(el.dataset.bid);
-      if (!a) continue;
-      const b = el.getBoundingClientRect();
-      const dx = a.left - b.left, dy = a.top - b.top;
-      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
-      el.animate(
-        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
-        { duration: 620, easing: 'cubic-bezier(.2, .8, .2, 1)', delay: Math.min(i++ * 14, 280), fill: 'backwards' },
-      );
-    }
+  function renderHead() {
+    els.exampleTag.hidden = !state.example;
+    els.thinking.hidden = state.phase !== 'classifying';
+    const grouped = state.phase === 'grouped';
+    els.notice.textContent = state.note || '말풍선을 끌어 다른 칸으로 옮기고, 누르면 빼거나 고칠 수 있어요.';
+    els.notice.hidden = !grouped || !state.ideas.length;
+    els.stageEmpty.hidden = state.ideas.length > 0 || grouped;
+    refreshBounds();
   }
 
   function renderChrome() {
     const p = state.phase, n = state.ideas.length;
-    const stepIdx = p === 'review' ? 1 : p === 'output' ? 2 : 0;
-    [...els.steps.children].forEach((li, i) => {
-      if (i === stepIdx) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
-    });
-    if (p === 'stage') {
-      const any = n > 0 || state.topic.trim();
-      setBtn(els.navLeft, any ? 'reset' : '', state.example ? '예시 지우기' : '새로 시작');
-      setBtn(els.navRight, 'classify', '정리하기', { primary: true, disabled: n < 2 });
+    let sub;
+    if (p === 'free') {
+      setBtn(els.navLeft, n || state.topic.trim() ? 'reset' : '', state.example ? '예시 지우기' : '새로 시작');
+      setBtn(els.navRight, 'classify', '정리하기', { primary: true, disabled: n === 0 });
+      sub = n ? `아이디어 ${n}개` : '생각나는 대로 적어 보세요';
     } else if (p === 'classifying') {
       setBtn(els.navLeft, 'cancel', '취소');
       setBtn(els.navRight, 'classify', '정리 중…', { primary: true, disabled: true });
-    } else if (p === 'review') {
-      setBtn(els.navLeft, 'to-stage', '‹ 아이디어');
-      setBtn(els.navRight, (IN_VIEWER ? !aiBlocked : !!readKey()) ? 'reclassify' : '', '다시 분류');
+      sub = '비슷한 것끼리 묶는 중…';
     } else {
-      setBtn(els.navLeft, 'to-review', '‹ 고르기');
-      setBtn(els.navRight, 'reset', '새로 시작');
+      const unsorted = state.ideas.some(i => i.keep && !i.cat);
+      const canAI = IN_VIEWER ? !aiBlocked : !!readKey();
+      setBtn(els.navLeft, 'scatter', '흩어 놓기');
+      if (unsorted) setBtn(els.navRight, 'classify', '정리하기', { primary: true });
+      else setBtn(els.navRight, canAI ? 'reclassify' : '', '다시 분류');
+      const filled = new Set(state.ideas.filter(i => i.keep && i.cat).map(i => i.cat)).size;
+      sub = `아이디어 ${n}개 · ${filled}칸에 정리`;
     }
+    els.navSub.textContent = sub;
+    els.ideaInput.disabled = p === 'classifying';
+    els.sendBtn.disabled = p === 'classifying' || !els.ideaInput.value.trim();
     renderKeyBtn();
-    renderDock();
   }
 
   function setBtn(btn, act, label, { disabled = false, primary = false } = {}) {
@@ -583,24 +487,6 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     btn.disabled = disabled;
     btn.removeAttribute('data-armed');
     if (btn === els.navRight) btn.className = primary ? 'pill-btn' : 'text-btn';
-  }
-
-  function renderDock() {
-    const p = state.phase;
-    els.composer.hidden = !(p === 'stage' || p === 'classifying');
-    els.reviewDock.hidden = p !== 'review';
-    els.outputDock.hidden = p !== 'output';
-    els.ideaInput.disabled = p === 'classifying';
-    els.sendBtn.disabled = p !== 'stage' || !els.ideaInput.value.trim();
-    if (p === 'review') {
-      const kept = state.ideas.filter(i => i.keep).length;
-      els.reviewSummary.textContent = `선택 ${kept} · 뺀 것 ${state.ideas.length - kept}`;
-      els.toOutputBtn.disabled = kept === 0;
-    } else if (p === 'output') {
-      const ta = $('promptText');
-      const text = (ta ? ta.value : state.prompt) || '';
-      els.outputCount.textContent = `${text.length.toLocaleString('ko-KR')}자`;
-    }
   }
 
   // Two taps to wipe real work; the viewer frame blocks confirm().
@@ -618,10 +504,9 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     const btn = e.currentTarget;
     switch (btn.dataset.act) {
       case 'classify': startClassify(); break;
-      case 'reclassify': startClassify({ force: true }); break;
+      case 'reclassify': startClassify({ all: true }); break;
       case 'cancel': if (classifyCtl) classifyCtl.abort(); break;
-      case 'to-stage': setPhase('stage', { flip: true }); break;
-      case 'to-review': setPhase('review'); break;
+      case 'scatter': setPhase('free'); break;
       case 'reset': if (state.example) resetAll(); else confirmTap(btn, resetAll); break;
     }
   }
@@ -632,48 +517,28 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     state = blank();
     els.topic.value = '';
     els.ideaInput.value = '';
-    setPhase('stage');
+    setPhase('free');
     els.ideaInput.focus();
     announce('새 브레인스토밍을 시작했어요.');
   }
 
-  // ---------- stage: floating bubbles ----------
+  // ---------- bubbles ----------
   const bodies = new Map();
   let stageBounds = { l: 0, r: 0, t: 0, b: 0 };
   let floatScale = 1;
-  let rafId = 0, lastT = 0;
+  let lastT = 0;
   let tapbackFor = null, tapSize = { w: 0, h: 0 };
 
-  function showStage() {
-    renderPinned();
-    syncBodies();
-    for (const p of bodies.values()) clampToBounds(p);
-    renderBodies(performance.now());
-    startLoop();
+  function headBottom(pad) {
+    const shown = [...els.boardHead.children].some(c => !c.hidden);
+    return shown ? els.boardHead.offsetTop + els.boardHead.offsetHeight + 12 : pad;
   }
 
-  function renderPinned() {
-    const n = state.ideas.length;
-    if (state.phase === 'classifying') {
-      els.pinnedMsg.replaceChildren(h('span', { class: 'typing', role: 'img', 'aria-label': '정리하는 중' }, h('i'), h('i'), h('i')));
-      els.pinnedTip.textContent = '비슷한 것끼리 묶는 중이에요.';
-    } else {
-      els.pinnedMsg.textContent = state.example ? '예시 아이디어예요. 직접 입력하면 사라져요.'
-        : n === 0 ? '떠오르는 말을 그대로 던져 주세요.'
-        : n === 1 ? '하나 더 입력하면 정리할 수 있어요.'
-        : '다 나왔으면 ‘정리하기’를 눌러 주세요.';
-      els.pinnedTip.textContent = state.example ? '‘정리하기’를 누르면 이 예시로 분류를 먼저 볼 수 있어요.'
-        : n ? '말풍선을 누르면 고치거나 지울 수 있고, 끌어서 옮길 수도 있어요.' : '';
-    }
-    els.pinnedTip.hidden = !els.pinnedTip.textContent;
-    els.stageEmpty.hidden = n > 0;
-    refreshBounds();
-  }
-
+  // Free-floating area: the visible card, below any chips at the top.
   function refreshBounds() {
     const W = els.stage.clientWidth, H = els.stage.clientHeight;
     const pad = W < 520 ? 12 : 20;
-    const top = els.pinned.offsetTop + els.pinned.offsetHeight + 14;
+    const top = headBottom(pad);
     stageBounds = { l: pad, r: Math.max(pad, W - pad), t: Math.min(top, Math.max(0, H - 60)), b: Math.max(top + 60, H - pad) };
   }
 
@@ -681,8 +546,14 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     const byId = ideaMap();
     for (const [id, p] of bodies) if (!byId.has(id)) { p.el.remove(); bodies.delete(id); }
     for (const idea of state.ideas) if (!bodies.has(idea.id)) createBody(idea);
-    for (const p of bodies.values()) p.el.classList.toggle('is-off', !byId.get(p.id).keep);
+    paintKeep();
     applyAges();
+    if (state.phase === 'grouped') {
+      measureAll();
+      const p = bodies.get(spawnId);
+      if (p && p.unplaced) { p.unplaced = false; spawnAt(p); }
+      return; // layoutBoard() places the rest
+    }
     fitScale();
     for (const p of bodies.values()) {
       if (!p.unplaced) continue;
@@ -692,13 +563,24 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   }
 
   function createBody(idea) {
-    const el = h('button', { type: 'button', class: 'float', 'data-id': idea.id, 'aria-label': `${idea.text}. 눌러서 고치거나 지우기` },
-      h('span', { class: 'bubble blue', 'data-bid': idea.id }, idea.text));
-    els.stage.insertBefore(el, els.tapback);
-    const p = { id: idea.id, el, x: 0, y: 0, vx: 0, vy: 0, w: 0, h: 0, phase: Math.random() * Math.PI * 2, held: false, unplaced: true };
+    const el = h('button', { type: 'button', class: 'float', 'data-id': idea.id },
+      h('span', { class: 'bubble blue' }, idea.text));
+    els.board.insertBefore(el, els.tapback);
+    const p = { id: idea.id, el, x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, wait: 0, w: 0, h: 0, phase: Math.random() * Math.PI * 2, held: false, unplaced: true };
     bodies.set(idea.id, p);
+    labelBody(p);
     bindFloat(p);
     return p;
+  }
+
+  function labelBody(p, where) {
+    const idea = state.ideas.find(i => i.id === p.id);
+    if (idea) p.el.setAttribute('aria-label', `${idea.text}${where ? ` (${where})` : ''}. 눌러서 고치거나 빼기`);
+  }
+
+  function paintKeep() {
+    const byId = ideaMap();
+    for (const p of bodies.values()) { const idea = byId.get(p.id); if (idea) p.el.classList.toggle('is-off', !idea.keep); }
   }
 
   // Older ideas fade toward the card color: each later idea takes 5.5% off, down to 35%.
@@ -717,7 +599,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     for (const p of bodies.values()) { p.w = p.el.offsetWidth; p.h = p.el.offsetHeight; }
   }
 
-  // Shrink the bubbles as the board fills up, grow them back when there is room.
+  // Shrink the floating bubbles as the board fills up, grow them back when there is room.
   function fitScale() {
     measureAll();
     const b = stageBounds;
@@ -735,15 +617,17 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     }
   }
 
+  // A new bubble rises from the input at the bottom of the visible card.
   function spawnAt(p) {
     const b = stageBounds;
+    const scroll = state.phase === 'grouped' ? els.stage.scrollTop : 0;
     p.x = (b.l + b.r) / 2 - p.w / 2 + (Math.random() - 0.5) * 60;
-    p.y = b.b - p.h;
+    p.y = scroll + b.b - p.h;
     p.vx = (Math.random() - 0.5) * 60;
     p.vy = -(240 + Math.random() * 80);
     p.el.classList.add('is-new');
     p.el.addEventListener('animationend', () => p.el.classList.remove('is-new'), { once: true });
-    clampToBounds(p);
+    if (state.phase !== 'grouped') clampToBounds(p);
   }
 
   function placeFree(p) {
@@ -775,25 +659,27 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     else if (p.y > maxY) { p.y = maxY; if (bounce) p.vy = -Math.abs(p.vy); }
   }
 
-  function startLoop() {
-    if (rafId) return;
-    lastT = performance.now();
-    rafId = requestAnimationFrame(tick);
-  }
-  function stopLoop() { cancelAnimationFrame(rafId); rafId = 0; }
-
   function tick(t) {
-    rafId = 0;
-    if (els.stage.hidden) return;
     const dt = Math.min(0.05, Math.max(0, (t - lastT) / 1000));
     lastT = t;
     step(dt);
     renderBodies(t);
-    rafId = requestAnimationFrame(tick);
+    requestAnimationFrame(tick);
   }
 
   function step(dt) {
     const list = [...bodies.values()];
+    if (state.phase === 'grouped') {
+      // Glide into the box slots; `wait` staggers the start so they leave one after another.
+      const k = calm() ? 1 : 1 - Math.exp(-dt * 6);
+      for (const p of list) {
+        if (p.held) continue;
+        if (p.wait > 0) { p.wait -= dt; continue; }
+        p.x += (p.tx - p.x) * k;
+        p.y += (p.ty - p.y) * k;
+      }
+      return;
+    }
     const moving = !calm();
     const gather = moving && state.phase === 'classifying';
     const b = stageBounds;
@@ -808,7 +694,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
         p.vy += (cy - p.y - p.h / 2) * 1.6 * dt;
         p.vx *= 1 - 1.5 * dt; p.vy *= 1 - 1.5 * dt;
       }
-      const sp = Math.hypot(p.vx, p.vy), cap = gather ? 110 : DRIFT;
+      const sp = Math.hypot(p.vx, p.vy), cap = gather ? 260 : DRIFT;
       if (sp > cap) {
         const k = Math.max(cap / sp, 1 - 1.4 * dt);
         p.vx *= k; p.vy *= k;
@@ -850,26 +736,178 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   }
 
   function renderBodies(t) {
-    const bob = !calm();
+    const amp = calm() ? 0 : state.phase === 'grouped' ? 2 : 3;
     for (const p of bodies.values()) {
-      const y = p.y + (bob && !p.held ? Math.sin(t / 900 + p.phase) * 3 : 0);
+      const y = p.y + (p.held ? 0 : Math.sin(t / 900 + p.phase) * amp);
       p.el.style.transform = `translate3d(${p.x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
     }
     if (tapbackFor) positionTapback();
   }
 
+  // ---------- planning boxes ----------
+  let zoneRects = []; // [{ id, x, y, w, h }] in board coordinates, for drops
+
+  function visibleZones() {
+    const groups = new Map();
+    for (const idea of state.ideas) {
+      const key = !idea.keep ? 'dropped' : idea.cat || 'new';
+      const p = bodies.get(idea.id);
+      if (!p) continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    }
+    const zones = [];
+    if (groups.has('new')) zones.push({ id: 'new', name: '새 아이디어', desc: '‘정리하기’를 누르면 알맞은 칸으로 가요' });
+    for (const c of CATEGORIES) if (c.id !== 'other' || groups.has('other')) zones.push(c);
+    if (groups.has('dropped')) zones.push({ id: 'dropped', name: '빼둔 아이디어', desc: '눌러서 ‘다시 넣기’를 고르면 돌아가요' });
+    return zones.map(z => ({ id: z.id, name: z.name, desc: z.desc, bodies: groups.get(z.id) || [] }));
+  }
+
+  // Grid of boxes (rows share a height); bubbles wrap left to right inside each box.
+  function layoutBoard({ stagger = false } = {}) {
+    const W = els.stage.clientWidth, H = els.stage.clientHeight;
+    if (!W) return;
+    const pad = W < 520 ? 12 : 20, gap = 14;
+    const cols = clamp(Math.floor((W - pad * 2 + gap) / (250 + gap)), 1, 3);
+    const zoneW = Math.floor((W - pad * 2 - gap * (cols - 1)) / cols);
+    const inner = zoneW - ZONE_PAD * 2;
+    els.stage.style.setProperty('--zone-inner', inner + 'px');
+    measureAll();
+    const zones = visibleZones();
+    let top = headBottom(pad), order = 0;
+    zoneRects = [];
+    for (let r = 0; r < zones.length; r += cols) {
+      const row = zones.slice(r, r + cols);
+      for (const z of row) {
+        let x = 0, y = 0, lineH = 0;
+        z.slots = [];
+        for (const p of z.bodies) {
+          if (x > 0 && x + p.w > inner) { x = 0; y += lineH + BUBBLE_GAP; lineH = 0; }
+          z.slots.push({ p, x, y });
+          x += p.w + BUBBLE_GAP;
+          lineH = Math.max(lineH, p.h);
+        }
+        z.contentH = z.bodies.length ? y + lineH : 30;
+      }
+      const rowH = Math.max(...row.map(z => HEAD_H + z.contentH + ZONE_PAD));
+      row.forEach((z, c) => {
+        const rect = { id: z.id, x: pad + c * (zoneW + gap), y: top, w: zoneW, h: rowH };
+        zoneRects.push(rect);
+        for (const { p, x, y } of z.slots) {
+          p.tx = rect.x + ZONE_PAD + x;
+          p.ty = rect.y + HEAD_H + y;
+          if (p.unplaced) { p.unplaced = false; p.x = p.tx; p.y = p.ty; } // first paint after a reload
+          if (stagger) p.wait = calm() ? 0 : Math.min(order * 0.035, 0.9);
+          order++;
+          labelBody(p, z.name);
+        }
+      });
+      top += rowH + gap;
+    }
+    els.board.style.height = Math.max(H, top - gap + pad) + 'px';
+    renderZones(zones);
+  }
+
+  function renderZones(zones) {
+    const current = new Map();
+    for (const el of els.zones.children) if (!el.classList.contains('is-leaving')) current.set(el.dataset.zone, el);
+    for (const z of zones) {
+      const rect = zoneRects.find(r => r.id === z.id);
+      let el = current.get(z.id);
+      if (!el) {
+        el = h('div', { class: `zone zone-${z.id} is-entering`, 'data-zone': z.id },
+          h('div', { class: 'zone-head' }, h('span', { class: 'zone-name' }), h('span', { class: 'zone-count' })),
+          h('p', { class: 'zone-desc' }),
+          h('p', { class: 'zone-empty' }, '아직 없어요'));
+        el.style.transform = `translate(${rect.x}px, ${rect.y}px)`;
+        el.style.width = rect.w + 'px';
+        el.style.height = rect.h + 'px';
+        els.zones.append(el);
+        requestAnimationFrame(() => requestAnimationFrame(() => el.classList.remove('is-entering')));
+      }
+      current.delete(z.id);
+      el.querySelector('.zone-name').textContent = z.name;
+      el.querySelector('.zone-count').textContent = z.bodies.length ? String(z.bodies.length) : '';
+      el.querySelector('.zone-desc').textContent = z.desc;
+      el.querySelector('.zone-empty').hidden = z.bodies.length > 0;
+      el.style.transform = `translate(${rect.x}px, ${rect.y}px)`;
+      el.style.width = rect.w + 'px';
+      el.style.height = rect.h + 'px';
+    }
+    for (const el of current.values()) fadeOutZone(el);
+  }
+
+  function fadeOutZone(el) {
+    el.classList.add('is-leaving');
+    setTimeout(() => { if (el.classList.contains('is-leaving')) el.remove(); }, 380);
+  }
+
+  // Back to floating: boxes fade, the board shrinks to the card, bubbles push off in random directions.
+  function releaseBoard() {
+    els.stage.scrollTop = 0;
+    els.board.style.height = '';
+    for (const el of [...els.zones.children]) fadeOutZone(el);
+    zoneRects = [];
+    refreshBounds();
+    fitScale();
+    for (const p of bodies.values()) {
+      const a = Math.random() * Math.PI * 2;
+      p.vx = Math.cos(a) * 60; p.vy = Math.sin(a) * 60; p.wait = 0;
+      labelBody(p);
+    }
+  }
+
+  function zoneAt(x, y) {
+    return zoneRects.find(r => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) || null;
+  }
+
+  function markZone(rect, on) {
+    const el = rect && els.zones.querySelector(`[data-zone="${rect.id}"]`);
+    if (el) el.classList.toggle('is-over', on);
+  }
+
+  function moveToZone(id, zoneId) {
+    const idea = state.ideas.find(i => i.id === id);
+    if (!idea) return;
+    if (zoneId === 'dropped') idea.keep = false;
+    else { idea.keep = true; idea.cat = zoneId === 'new' ? null : zoneId; }
+    paintKeep();
+    renderChrome();
+    const name = zoneId === 'dropped' ? '빼둔 아이디어' : zoneId === 'new' ? '새 아이디어' : CATEGORIES.find(c => c.id === zoneId).name;
+    announce(`‘${name}’ 칸으로 옮겼어요.`);
+  }
+
+  // While dragging in a long board, scroll when the finger nears the card's top or bottom edge.
+  function edgeScroll(clientY) {
+    const r = els.stage.getBoundingClientRect(), edge = 48;
+    const v = clientY < r.top + edge ? -12 : clientY > r.bottom - edge ? 12 : 0;
+    if (!v) return 0;
+    const before = els.stage.scrollTop;
+    els.stage.scrollTop = before + v;
+    return els.stage.scrollTop - before;
+  }
+
   function bindFloat(p) {
     p.el.addEventListener('pointerdown', e => {
-      if (state.phase !== 'stage' || e.button > 0) return;
+      if ((state.phase !== 'free' && state.phase !== 'grouped') || e.button > 0) return;
       e.preventDefault();
       closeTapback();
       p.el.setPointerCapture(e.pointerId);
+      const grouped = state.phase === 'grouped';
       const sx = e.clientX, sy = e.clientY, px = p.x, py = p.y;
-      let dragging = false, lx = sx, ly = sy, lt = e.timeStamp, vx = 0, vy = 0;
+      let dragging = false, lx = sx, ly = sy, lt = e.timeStamp, vx = 0, vy = 0, scrolled = 0, over = null;
       const move = ev => {
         const dx = ev.clientX - sx, dy = ev.clientY - sy;
         if (!dragging && Math.hypot(dx, dy) < 5) return;
         if (!dragging) { dragging = true; p.held = true; p.el.classList.add('is-held'); }
+        if (grouped) {
+          scrolled += edgeScroll(ev.clientY);
+          p.x = clamp(px + dx, 0, Math.max(0, els.board.offsetWidth - p.w));
+          p.y = clamp(py + dy + scrolled, 0, Math.max(0, els.board.offsetHeight - p.h));
+          const z = zoneAt(p.x + p.w / 2, p.y + p.h / 2);
+          if (z !== over) { markZone(over, false); over = z; markZone(over, true); }
+          return;
+        }
         p.x = px + dx; p.y = py + dy;
         clampToBounds(p);
         const span = Math.max(1, ev.timeStamp - lt) / 1000;
@@ -881,30 +919,39 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
         p.el.removeEventListener('pointermove', move);
         p.el.removeEventListener('pointerup', end);
         p.el.removeEventListener('pointercancel', end);
-        if (dragging) {
-          p.held = false;
-          p.el.classList.remove('is-held');
-          p.vx = calm() ? 0 : clamp(vx, -420, 420);
-          p.vy = calm() ? 0 : clamp(vy, -420, 420);
-        } else if (ev.type === 'pointerup') {
-          openTapback(p);
+        if (!dragging) { if (ev.type === 'pointerup') openTapback(p); return; }
+        p.held = false;
+        p.el.classList.remove('is-held');
+        if (grouped) {
+          markZone(over, false);
+          if (ev.type === 'pointerup' && over) moveToZone(p.id, over.id);
+          if (state.phase === 'grouped') layoutBoard();
+          save();
+          return;
         }
+        p.vx = calm() ? 0 : clamp(vx, -420, 420);
+        p.vy = calm() ? 0 : clamp(vy, -420, 420);
       };
       p.el.addEventListener('pointermove', move);
       p.el.addEventListener('pointerup', end);
       p.el.addEventListener('pointercancel', end);
     });
     // Keyboard: Enter/Space opens the menu, Delete removes.
-    p.el.addEventListener('click', e => { if (e.detail === 0 && state.phase === 'stage') openTapback(p, true); });
+    p.el.addEventListener('click', e => {
+      if (e.detail === 0 && (state.phase === 'free' || state.phase === 'grouped')) openTapback(p, true);
+    });
     p.el.addEventListener('keydown', e => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && state.phase === 'stage') { e.preventDefault(); removeIdea(p.id); }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && state.phase !== 'classifying') { e.preventDefault(); removeIdea(p.id); }
     });
   }
 
   function openTapback(p, focus = false) {
+    const idea = state.ideas.find(i => i.id === p.id);
+    if (!idea) return;
     tapbackFor = p;
     p.held = true;
     p.el.classList.add('is-selected');
+    els.tapToggle.textContent = idea.keep ? '빼기' : '다시 넣기';
     els.tapback.hidden = false;
     tapSize = { w: els.tapback.offsetWidth, h: els.tapback.offsetHeight };
     positionTapback();
@@ -916,7 +963,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     let x = p.x + p.w / 2 - tapSize.w / 2;
     let y = p.y - tapSize.h - 8;
     if (y < 6) y = p.y + p.h + 8;
-    x = clamp(x, 6, Math.max(6, els.stage.clientWidth - tapSize.w - 6));
+    x = clamp(x, 6, Math.max(6, els.board.clientWidth - tapSize.w - 6));
     els.tapback.style.transform = `translate(${x}px, ${y}px)`;
   }
 
@@ -941,23 +988,23 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
 
   function addIdea(raw) {
     const text = raw.replace(/\s+/g, ' ').trim().slice(0, 200);
-    if (!text || state.phase !== 'stage') return;
+    if (!text || state.phase === 'classifying') return;
     if (state.example) clearExample();
-    const idea = { id: state.nextId++, text, keep: true };
+    const idea = { id: state.nextId++, text, keep: true, cat: null };
     state.ideas.push(idea);
     syncBodies(idea.id);
     afterIdeasChange();
+    if (state.phase === 'grouped') els.stage.scrollTo({ top: 0, behavior: calm() ? 'auto' : 'smooth' });
   }
 
   function removeIdea(id) {
     if (tapbackFor && tapbackFor.id === id) closeTapback();
     state.ideas = state.ideas.filter(i => i.id !== id);
-    for (const g of state.groups) g.ids = g.ids.filter(x => x !== id);
     if (!state.ideas.length) state.example = false;
     const p = bodies.get(id);
     if (p) popBody(p);
     applyAges();
-    fitScale();
+    if (state.phase !== 'grouped') fitScale();
     afterIdeasChange();
   }
 
@@ -965,14 +1012,14 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     popAllBodies();
     state.example = false;
     state.ideas = [];
-    state.groups = [];
-    state.classifiedSig = '';
     state.note = '';
     if (state.topic === EXAMPLE_TOPIC) { state.topic = ''; els.topic.value = ''; }
+    if (state.phase === 'grouped') setPhase('free');
   }
 
   function afterIdeasChange() {
-    renderPinned();
+    renderHead();
+    if (state.phase === 'grouped') layoutBoard();
     renderChrome();
     save();
   }
@@ -980,90 +1027,133 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   // ---------- classification ----------
   let classifyCtl = null;
 
-  async function startClassify({ force = false } = {}) {
-    if (state.ideas.length < 2 || state.phase === 'classifying') return;
-    const sig = ideaSig();
-    if (!force && sig === state.classifiedSig && state.groups.length) { setPhase('review', { flip: true }); return; }
-    if (!IN_VIEWER && !readKey() && !keyAsked) { openKeySheet(() => startClassify({ force })); return; }
+  // Only ideas without a box are sent, unless `all` re-sorts everything.
+  async function startClassify({ all = false } = {}) {
+    if (state.phase === 'classifying' || !state.ideas.length) return;
+    closeTapback();
+    const targets = state.ideas.filter(i => all || !i.cat);
+    if (!targets.length) { setPhase('grouped'); return; }
+    if (!IN_VIEWER && !readKey() && !keyAsked) { openKeySheet(() => startClassify({ all })); return; }
     const ctl = new AbortController();
     classifyCtl = ctl;
     const cameFrom = state.phase;
-    setPhase('classifying', { flip: cameFrom === 'review' });
+    setPhase('classifying');
     const t0 = performance.now();
     const restore = () => {
       if (classifyCtl !== ctl) return;
       classifyCtl = null;
-      if (cameFrom === 'review') setPhase('review', { flip: true }); else setPhase('stage');
+      setPhase(cameFrom);
     };
-    let groups, note = '';
+    let assigned, note = '';
     try {
       if (IN_VIEWER) {
         const sample = aiBlocked ? null : await samplePromise;
         if (ctl.signal.aborted) return restore();
         if (!sample) throw { code: 'unavailable' };
-        groups = await aiClassify(sample, ctl.signal, force);
+        assigned = await aiClassify(sample, targets, ctl.signal, all);
       } else {
         const key = readKey();
         if (!key) throw { code: 'no_key' };
-        groups = await apiClassify(key, ctl.signal);
+        assigned = await apiClassify(key, targets, ctl.signal);
       }
     } catch (err) {
       const code = err && err.code;
       if (code === 'cancelled' || ctl.signal.aborted) return restore();
       if (IN_VIEWER && BLOCKING.has(code)) aiBlocked = true;
-      groups = localClassify(state.ideas);
+      assigned = localClassify(targets);
       note = noteFor(code);
     }
-    // Let the gather animation read as a beat even when the answer is instant.
+    // Let the gathering read as a beat even when the answer is instant.
     const wait = calm() ? 0 : Math.max(0, 1100 - (performance.now() - t0));
     if (wait) await new Promise(r => setTimeout(r, wait));
     if (ctl.signal.aborted || classifyCtl !== ctl) return restore();
     classifyCtl = null;
-    state.groups = groups;
+    for (const idea of targets) idea.cat = assigned.get(idea.id) || 'other';
     state.note = note;
-    state.classifiedSig = sig;
-    setPhase('review', { flip: true });
-    announce(`${state.ideas.length}개의 아이디어를 ${groups.length}개 그룹으로 묶었어요.`);
+    setPhase('grouped');
+    const filled = new Set(state.ideas.filter(i => i.keep && i.cat).map(i => i.cat)).size;
+    announce(`아이디어를 ${filled}칸에 나눴어요.`);
   }
 
   function noteFor(code) {
-    if (code === 'no_key') return '겹치는 단어를 기준으로 묶었어요. 위의 ‘Gemini 연결’에 무료 API 키를 넣으면 Gemini가 분류해요.';
-    if (code === 'bad_key') return 'API 키가 맞지 않아서 겹치는 단어를 기준으로 묶었어요. 위의 ‘Gemini 연결’에서 키를 확인해 주세요.';
-    if (code === 'network') return 'Gemini API에 연결하지 못해서 겹치는 단어를 기준으로 묶었어요. 연결을 확인하고 ‘다시 분류’를 눌러 보세요.';
-    if (code === 'refused') return 'AI가 이 내용의 분류를 거절해서 겹치는 단어를 기준으로 묶었어요.';
-    if (code === 'rate_limited') return 'AI 요청 한도에 걸려서 우선 겹치는 단어를 기준으로 묶었어요. 잠시 뒤 ‘다시 분류’를 눌러 보세요.';
-    if (code === 'session_expired') return '로그인이 만료되어 겹치는 단어를 기준으로 묶었어요. 다시 로그인하면 AI로 분류할 수 있어요.';
-    if (BLOCKING.has(code)) return '이 화면에서는 AI 분류를 쓸 수 없어서 겹치는 단어를 기준으로 묶었어요. 끌어서 직접 옮겨 주세요.';
-    return 'AI 분류가 실패해서 겹치는 단어를 기준으로 묶었어요. ‘다시 분류’로 한 번 더 시도할 수 있어요.';
+    const guessed = '말에 들어 있는 단어로 짐작해서 나눴어요.';
+    if (code === 'no_key') return `${guessed} 위의 ‘Gemini 연결’에 무료 API 키를 넣으면 더 정확하게 나눠요.`;
+    if (code === 'bad_key') return `API 키가 맞지 않아서 ${guessed} 위의 ‘Gemini 연결’에서 키를 확인해 주세요.`;
+    if (code === 'network') return `Gemini API에 연결하지 못해서 ${guessed} 연결을 확인하고 ‘다시 분류’를 눌러 보세요.`;
+    if (code === 'refused') return `AI가 분류를 거절해서 ${guessed}`;
+    if (code === 'rate_limited') return `AI 요청 한도에 걸려서 ${guessed} 잠시 뒤 ‘다시 분류’를 눌러 보세요.`;
+    if (code === 'session_expired') return `로그인이 만료되어 ${guessed} 다시 로그인하면 AI가 나눠요.`;
+    if (BLOCKING.has(code)) return `이 화면에서는 AI를 쓸 수 없어서 ${guessed} 틀린 건 끌어서 옮겨 주세요.`;
+    return `AI 분류가 실패해서 ${guessed} ‘다시 분류’로 한 번 더 시도할 수 있어요.`;
   }
 
   function classifyPrompt(list) {
     const topic = state.topic.trim();
     return [
-      '다음은 브레인스토밍 중에 나온 말과 아이디어 목록입니다.',
+      '아이들과 시뮬레이션 프로그램을 기획하면서 브레인스토밍한 말과 아이디어입니다.',
       `주제: ${topic || '(따로 정하지 않음)'}`,
       '',
-      '비슷한 성격끼리 묶어 그룹으로 분류해 주세요.',
-      '- 그룹은 2~6개로 만드세요. 항목이 6개 이하면 2~3개면 충분합니다.',
-      '- 모든 항목을 정확히 한 그룹에 넣으세요. 항목은 번호로만 가리키고 문장은 고치지 마세요.',
-      '- name: 그룹을 대표하는 2~10자 한국어 이름.',
-      '- summary: 그룹의 공통점을 40자 이내 한 문장으로.',
-      '- 항목이 많은 그룹부터 나열하세요.',
+      '각 항목을 아래 범주 중 가장 알맞은 하나에 넣어 주세요.',
+      ...CATEGORIES.map(c => `- ${c.id} (${c.name}): ${c.hint}`),
+      '',
+      '- 모든 항목을 정확히 한 범주에 넣으세요. 항목은 번호로만 가리키세요.',
+      '- 아이들 말이라 짧거나 어색할 수 있어요. 뜻을 헤아려 분류하세요.',
       '',
       '항목:',
       ...list.map((it, i) => `${i + 1}. ${it.text}`),
       '',
       'JSON 하나만 답하세요. 형식:',
-      '{"groups":[{"name":"홍보","summary":"책방을 알리는 방법","items":[1,4]}]}',
+      '{"groups":[{"category":"rule","items":[1,4]}]}',
     ].join('\n');
   }
 
-  async function aiClassify(sample, signal, fresh) {
-    const list = state.ideas.slice();
+  // { groups: [{ category, items: [n] }] } -> Map(idea id -> category id); anything left out goes to 기타.
+  function readAssignments(data, list) {
+    const raw = Array.isArray(data) ? data : data && Array.isArray(data.groups) ? data.groups : null;
+    if (!raw) throw { code: 'invalid_json' };
+    const out = new Map();
+    for (const g of raw) {
+      const cat = g && CAT_IDS.includes(g.category) ? g.category : null;
+      if (!cat) continue;
+      for (const n of Array.isArray(g.items) ? g.items : []) {
+        const idea = list[Number(n) - 1];
+        if (idea && !out.has(idea.id)) out.set(idea.id, cat);
+      }
+    }
+    if (!out.size) throw { code: 'invalid_json' };
+    for (const idea of list) if (!out.has(idea.id)) out.set(idea.id, 'other');
+    return out;
+  }
+
+  async function aiClassify(sample, list, signal, fresh) {
     const options = { modelTier: 'quick', signal };
     if (fresh) options.cache = false;
     const data = await sample.json(classifyPrompt(list), options);
-    return normalizeGroups(data, list);
+    return readAssignments(data, list);
+  }
+
+  // Fallback when no AI is reachable: score each idea against cue words kids tend to use.
+  const CUES = {
+    question: [/\?\s*$/, /궁금/, /왜/, /어떻게/, /얼마/, /몇 /, /[을를]까\s*$|일까|뭘까/],
+    event: [/갑자기/, /사건/, /이벤트/, /사고/, /탈출/, /태어나/, /폭풍|태풍|지진|홍수|불이 나/, /비가 오|눈이 오/, /생기면|생겨/, /일어나/],
+    result: [/성공/, /실패/, /이기|이겨|승리/, /지면|패배/, /끝나|끝이/, /점수/, /보상/, /행복하면/],
+    rule: [/[가-힣]면(\s|$)/, /해야|있어야|돼야/, /안 ?돼|못 ?해/, /규칙/, /조건/, /필요/, /마다/, /늘어|줄어|변해/],
+    action: [/할 수 있/, /주거나|줄 수|주기/, /만들/, /고르|선택/, /청소/, /팔아|사서|모으/, /움직/, /돌봐|돌보/],
+    goal: [/시뮬레이션/, /목표/, /알아보/, /주제/, /배우/, /우리가 .*(돼서|되어)/, /거야\s*$/],
+    place: [/에서/, /배경/, /장소/, /동네|마을|도시|학교|숲|바다|우주|섬|공원|동물원|집/, /밤|낮|아침|저녁|여름|겨울/],
+    character: [/등장/, /주인공/, /캐릭터/, /사람|학생|선생님|친구|손님|사육사|의사/, /사자|펭귄|코끼리|강아지|고양이|로봇|개미|물고기/, /나와|나오/],
+  };
+  function localClassify(list) {
+    const out = new Map();
+    for (const idea of list) {
+      let best = 'other', bestScore = 0;
+      for (const [cat, cues] of Object.entries(CUES)) {
+        const score = cues.reduce((n, re) => n + (re.test(idea.text) ? 1 : 0), 0);
+        if (score > bestScore) { best = cat; bestScore = score; }
+      }
+      out.set(idea.id, best);
+    }
+    return out;
   }
 
   // ---------- Gemini API (outside the viewer) ----------
@@ -1077,12 +1167,11 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
         items: {
           type: 'OBJECT',
           properties: {
-            name: { type: 'STRING' },
-            summary: { type: 'STRING' },
+            category: { type: 'STRING', enum: CAT_IDS },
             items: { type: 'ARRAY', items: { type: 'INTEGER' } },
           },
-          required: ['name', 'summary', 'items'],
-          propertyOrdering: ['name', 'summary', 'items'],
+          required: ['category', 'items'],
+          propertyOrdering: ['category', 'items'],
         },
       },
     },
@@ -1164,8 +1253,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     return picked;
   }
 
-  async function apiClassify(key, signal) {
-    const list = state.ideas.slice();
+  async function apiClassify(key, list, signal) {
     const body = {
       contents: [{ role: 'user', parts: [{ text: classifyPrompt(list) }] }],
       generationConfig: { responseMimeType: 'application/json', responseSchema: GROUPS_SCHEMA },
@@ -1187,7 +1275,7 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
       const text = ((cand.content && cand.content.parts) || []).filter(p => !p.thought).map(p => p.text || '').join('');
       let parsed;
       try { parsed = JSON.parse(text); } catch (_) { throw { code: 'invalid_json' }; }
-      return normalizeGroups(parsed, list);
+      return readAssignments(parsed, list);
     }
     if (last.code === 'model_gone') { modelCache = null; throw { code: 'upstream_error' }; }
     throw last;
@@ -1228,437 +1316,19 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
     if (proceed && then) then();
   }
 
-  function normalizeGroups(data, list) {
-    const raw = Array.isArray(data) ? data : data && Array.isArray(data.groups) ? data.groups : null;
-    if (!raw) throw { code: 'invalid_json' };
-    const used = new Set();
-    const groups = [];
-    for (const g of raw) {
-      if (!g || typeof g !== 'object') continue;
-      const ids = [];
-      for (const n of Array.isArray(g.items) ? g.items : []) {
-        const idea = list[Number(n) - 1];
-        if (idea && !used.has(idea.id)) { used.add(idea.id); ids.push(idea.id); }
-      }
-      if (!ids.length) continue;
-      groups.push({ id: uid(), name: String(g.name || '그룹').trim().slice(0, 30), summary: String(g.summary || '').trim().slice(0, 80), ids });
-    }
-    const rest = list.filter(i => !used.has(i.id)).map(i => i.id);
-    if (rest.length) groups.push({ id: uid(), name: '기타', summary: '', ids: rest });
-    if (groups.length < 1) throw { code: 'invalid_json' };
-    return groups;
-  }
-
-  // Fallback when Claude is not reachable: average-link clustering on shared words and syllable pairs.
-  const JOSA = /(으로|에서|에게|까지|부터|처럼|보다|하고|이랑|이나|에|의|을|를|이|가|은|는|와|과|도|로|만|요)$/;
-  const STOP = new Set(['그리고', '그냥', '진짜', '정말', '너무', '아니면', '근데', '이거', '그거', '저거', '어떻게', '우리', '하는', '하면', '해서', '있는', '없는', '같은', '이런', '저런', '같이']);
-  const tokensOf = text => new Set(text.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/)
-    .map(w => (w.length >= 3 ? w.replace(JOSA, '') : w))
-    .filter(w => w.length >= 2 && !STOP.has(w)));
-  const pairsOf = text => {
-    const s = text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-    const out = new Set();
-    for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
-    return out;
-  };
-  const jaccard = (a, b) => {
-    if (!a.size || !b.size) return 0;
-    let n = 0;
-    for (const x of a) if (b.has(x)) n++;
-    return n / (a.size + b.size - n);
-  };
-
-  function localClassify(ideas) {
-    const f = ideas.map(i => ({ id: i.id, tok: tokensOf(i.text), bi: pairsOf(i.text) }));
-    const S = f.map(a => f.map(b => 0.65 * jaccard(a.tok, b.tok) + 0.35 * jaccard(a.bi, b.bi)));
-    let clusters = f.map((_, i) => [i]);
-    for (;;) {
-      let best = 0.12, bi = -1, bj = -1;
-      for (let i = 0; i < clusters.length; i++) {
-        for (let j = i + 1; j < clusters.length; j++) {
-          let s = 0;
-          for (const x of clusters[i]) for (const y of clusters[j]) s += S[x][y];
-          s /= clusters[i].length * clusters[j].length;
-          if (s > best) { best = s; bi = i; bj = j; }
-        }
-      }
-      if (bi < 0) break;
-      clusters[bi] = clusters[bi].concat(clusters[bj]);
-      clusters.splice(bj, 1);
-    }
-    clusters.sort((a, b) => b.length - a.length);
-    const groups = [], rest = [], names = new Set();
-    for (const c of clusters) {
-      if (c.length < 2) { rest.push(...c); continue; }
-      let name = clusterName(c.map(i => f[i]));
-      for (let k = 2; names.has(name); k++) name = `${clusterName(c.map(i => f[i]))} ${k}`;
-      names.add(name);
-      groups.push({ id: uid(), name, summary: '', ids: c.map(i => f[i].id) });
-    }
-    if (rest.length) groups.push({ id: uid(), name: groups.length ? '기타' : '아이디어', summary: '', ids: rest.map(i => f[i].id) });
-    return groups;
-  }
-
-  function clusterName(members) {
-    const count = new Map();
-    for (const m of members) for (const t of m.tok) count.set(t, (count.get(t) || 0) + 1);
-    const top = [...count].sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
-    return top && top[1] >= 2 ? `${top[0]} 관련` : '비슷한 아이디어';
-  }
-
-  // ---------- review ----------
-  function reconcileGroups() {
-    const byId = ideaMap();
-    const seen = new Set();
-    for (const g of state.groups) g.ids = g.ids.filter(id => byId.has(id) && !seen.has(id) && seen.add(id));
-    const missing = state.ideas.filter(i => !seen.has(i.id)).map(i => i.id);
-    if (missing.length) {
-      let etc = state.groups.find(g => g.name === '기타');
-      if (!etc) state.groups.push(etc = { id: uid(), name: '기타', summary: '', ids: [] });
-      etc.ids.push(...missing);
-    }
-  }
-
-  const metaCount = (kept, total) => (total ? `${total}개 중 ${kept}개 선택` : '비어 있음');
-
-  function renderReview() {
-    reconcileGroups();
-    const byId = ideaMap();
-    const filled = state.groups.filter(g => g.ids.length).length;
-    const intro = h('div', { class: 'intro' },
-      botRow(`${state.ideas.length}개의 아이디어를 ${filled}개 그룹으로 묶었어요.`),
-      botRow('쓸 것만 남기고, 나머지는 눌러서 빼 주세요.', true),
-      h('p', { class: 'tip indent' }, '말풍선을 끌어서(휴대폰은 길게 눌러서) 다른 그룹으로 옮길 수 있어요. 그룹 이름은 눌러서 고치세요.'),
-      state.note ? h('p', { class: 'tip indent' }, state.note) : null);
-    const groups = h('div', { class: 'groups' }, state.groups.map(g => groupEl(g, byId)));
-    els.review.replaceChildren(intro, groups, h('button', { type: 'button', class: 'add-group', 'data-act': 'add-group' }, '+ 새 그룹'));
-    for (const inp of els.review.querySelectorAll('.group-name')) sizeName(inp);
-  }
-
-  function groupEl(g, byId) {
-    const kept = g.ids.filter(id => byId.get(id).keep).length;
-    return h('section', { class: 'group', 'data-gid': g.id },
-      h('div', { class: 'group-head' },
-        h('input', { class: 'group-name', type: 'text', maxlength: 30, value: g.name, 'aria-label': '그룹 이름', 'data-gid': g.id }),
-        h('p', { class: 'group-meta' },
-          h('span', { class: 'count' }, metaCount(kept, g.ids.length)),
-          g.summary ? h('span', null, g.summary) : null),
-        g.ids.length
-          ? h('button', { type: 'button', class: 'inline-btn', 'data-act': 'all' }, kept === g.ids.length ? '모두 빼기' : '모두 선택')
-          : h('button', { type: 'button', class: 'inline-btn', 'data-act': 'remove-group' }, '그룹 삭제')),
-      g.ids.length ? g.ids.map(id => rowEl(byId.get(id))) : h('p', { class: 'drop-hint' }, '여기로 말풍선을 끌어다 놓으세요'));
-  }
-
-  function rowEl(idea) {
-    return h('div', { class: 'row' + (idea.keep ? '' : ' is-off'), 'data-id': idea.id },
-      h('button', { type: 'button', class: 'check', 'aria-pressed': String(idea.keep), 'aria-label': `선택: ${idea.text}`, html: CHECK_SVG }),
-      h('div', { class: 'bubble blue', 'data-bid': idea.id }, idea.text));
-  }
-
-  function sizeName(inp) {
-    inp.style.width = `calc(${Math.max(3, [...inp.value].length) * 1.05}em + 20px)`;
-  }
-
-  function syncRow(row) {
-    const idea = state.ideas.find(i => i.id === Number(row.dataset.id));
-    if (!idea) return;
-    row.classList.toggle('is-off', !idea.keep);
-    row.querySelector('.check').setAttribute('aria-pressed', String(idea.keep));
-  }
-
-  function refreshGroupMeta(sec) {
-    const g = sec && state.groups.find(x => x.id === sec.dataset.gid);
-    if (!g) return;
-    const byId = ideaMap();
-    const kept = g.ids.filter(id => byId.get(id).keep).length;
-    sec.querySelector('.count').textContent = metaCount(kept, g.ids.length);
-    const btn = sec.querySelector('[data-act="all"]');
-    if (btn) btn.textContent = kept === g.ids.length ? '모두 빼기' : '모두 선택';
-  }
-
-  function toggleKeep(id) {
-    const idea = state.ideas.find(i => i.id === id);
-    if (!idea) return;
-    idea.keep = !idea.keep;
-    const row = els.review.querySelector(`.row[data-id="${id}"]`);
-    if (row) { syncRow(row); refreshGroupMeta(row.closest('.group')); }
-    renderDock();
-    save();
-  }
-
-  els.review.addEventListener('click', e => {
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    if (btn.classList.contains('check')) { toggleKeep(Number(btn.closest('.row').dataset.id)); return; }
-    const sec = btn.closest('.group');
-    const g = sec && state.groups.find(x => x.id === sec.dataset.gid);
-    if (btn.dataset.act === 'all' && g) {
-      const byId = ideaMap();
-      const keep = !g.ids.every(id => byId.get(id).keep);
-      for (const id of g.ids) byId.get(id).keep = keep;
-      sec.querySelectorAll('.row').forEach(syncRow);
-      refreshGroupMeta(sec);
-      renderDock();
-      save();
-    } else if (btn.dataset.act === 'remove-group' && g) {
-      state.groups = state.groups.filter(x => x !== g);
-      sec.remove();
-      save();
-    } else if (btn.dataset.act === 'add-group') {
-      const ng = { id: uid(), name: '새 그룹', summary: '', ids: [] };
-      state.groups.push(ng);
-      renderReview();
-      const inp = els.review.querySelector(`.group-name[data-gid="${ng.id}"]`);
-      if (inp) { inp.focus({ preventScroll: true }); inp.select(); inp.scrollIntoView({ block: 'center', behavior: calm() ? 'auto' : 'smooth' }); }
-      save();
-    }
-  });
-
-  els.review.addEventListener('input', e => {
-    if (!e.target.classList.contains('group-name')) return;
-    const g = state.groups.find(x => x.id === e.target.dataset.gid);
-    if (g) { g.name = e.target.value; sizeName(e.target); save(); }
-  });
-  els.review.addEventListener('focusout', e => {
-    if (!e.target.classList || !e.target.classList.contains('group-name') || e.target.value.trim()) return;
-    e.target.value = '이름 없는 그룹';
-    const g = state.groups.find(x => x.id === e.target.dataset.gid);
-    if (g) g.name = e.target.value;
-    sizeName(e.target);
-    save();
-  });
-  els.review.addEventListener('keydown', e => {
-    if (e.target.classList.contains('group-name') && e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) e.target.blur();
-  });
-  els.review.addEventListener('contextmenu', e => { if (e.target.closest('.row')) e.preventDefault(); });
-
-  // Tap a bubble to keep/drop it; drag it (long-press on touch) onto another group to move it.
-  let drag = null;
-  els.review.addEventListener('pointerdown', e => {
-    const bubble = e.target.closest('.row .bubble');
-    if (!bubble || e.button > 0 || drag) return;
-    const row = bubble.closest('.row');
-    drag = {
-      id: Number(row.dataset.id), row, bubble, pid: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
-      touch: e.pointerType !== 'mouse', active: false, cancelled: false, timer: 0, ghost: null, over: null, offX: 0, offY: 0,
-      from: row.closest('.group').dataset.gid,
-    };
-    if (drag.touch) { const s = drag; s.timer = setTimeout(() => beginDrag(s), 380); }
-    window.addEventListener('pointermove', onDragMove);
-    window.addEventListener('pointerup', onDragEnd);
-    window.addEventListener('pointercancel', onDragEnd);
-  });
-
-  function onDragMove(e) {
-    const s = drag;
-    if (!s || e.pointerId !== s.pid) return;
-    s.x = e.clientX; s.y = e.clientY;
-    if (!s.active) {
-      const dist = Math.hypot(s.x - s.x0, s.y - s.y0);
-      if (s.touch) { if (dist > 8) { s.cancelled = true; clearTimeout(s.timer); } return; }
-      if (dist < 6) return;
-      beginDrag(s);
-    }
-    moveGhost(s);
-  }
-
-  function beginDrag(s) {
-    if (drag !== s || s.cancelled || s.active) return;
-    s.active = true;
-    const r = s.bubble.getBoundingClientRect();
-    s.offX = s.x0 - r.left; s.offY = s.y0 - r.top;
-    s.ghost = s.bubble.cloneNode(true);
-    s.ghost.removeAttribute('data-bid');
-    s.ghost.classList.add('ghost');
-    s.ghost.style.width = r.width + 'px';
-    document.body.append(s.ghost);
-    s.row.classList.add('is-dragging');
-    moveGhost(s);
-    requestAnimationFrame(autoScroll);
-  }
-
-  function moveGhost(s) {
-    s.ghost.style.transform = `translate(${s.x - s.offX}px, ${s.y - s.offY}px) scale(1.04)`;
-    const under = document.elementFromPoint(s.x, s.y);
-    let sec = under && under.closest ? under.closest('.group') : null;
-    if (sec && sec.dataset.gid === s.from) sec = null;
-    if (sec !== s.over) {
-      if (s.over) s.over.classList.remove('is-over');
-      s.over = sec;
-      if (sec) sec.classList.add('is-over');
-    }
-  }
-
-  function autoScroll() {
-    const s = drag;
-    if (!s || !s.active) return;
-    const r = els.card.getBoundingClientRect(), edge = 56;
-    let v = 0;
-    if (s.y < r.top + edge) v = -Math.ceil((r.top + edge - s.y) / 5);
-    else if (s.y > r.bottom - edge) v = Math.ceil((s.y - (r.bottom - edge)) / 5);
-    if (v) { els.review.scrollTop += v; moveGhost(s); }
-    requestAnimationFrame(autoScroll);
-  }
-
-  function onDragEnd(e) {
-    const s = drag;
-    if (!s || e.pointerId !== s.pid) return;
-    drag = null;
-    clearTimeout(s.timer);
-    window.removeEventListener('pointermove', onDragMove);
-    window.removeEventListener('pointerup', onDragEnd);
-    window.removeEventListener('pointercancel', onDragEnd);
-    if (!s.active) {
-      if (e.type === 'pointerup' && !s.cancelled && Math.hypot(e.clientX - s.x0, e.clientY - s.y0) < 8) toggleKeep(s.id);
-      return;
-    }
-    s.row.classList.remove('is-dragging');
-    if (s.over) s.over.classList.remove('is-over');
-    const ghostRect = s.ghost.getBoundingClientRect();
-    s.ghost.remove();
-    if (!s.over || e.type !== 'pointerup') return;
-    const from = state.groups.find(g => g.id === s.from);
-    const to = state.groups.find(g => g.id === s.over.dataset.gid);
-    if (!from || !to) return;
-    const before = captureRects(els.review);
-    before.set(String(s.id), ghostRect);
-    from.ids = from.ids.filter(x => x !== s.id);
-    to.ids.push(s.id);
-    renderReview();
-    playFlip(els.review, before);
-    renderDock();
-    save();
-    announce(`‘${to.name}’ 그룹으로 옮겼어요.`);
-  }
-
-  document.addEventListener('touchmove', e => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
-
-  // ---------- output ----------
-  function requestText() {
-    if (state.request === 'custom') return state.customRequest.trim();
-    const r = REQUESTS.find(x => x.id === state.request);
-    return r ? r.text : '';
-  }
-
-  function buildPrompt() {
-    const byId = ideaMap();
-    const topic = state.topic.trim();
-    const out = ['# 브레인스토밍 정리', ''];
-    if (topic) out.push(`주제: ${topic}`, '');
-    out.push(`아래는 ${topic ? '위 주제로 ' : ''}브레인스토밍한 아이디어입니다. 비슷한 것끼리 묶고, 채택한 것만 남겼습니다.`);
-    const dropped = [];
-    for (const g of state.groups) {
-      const items = g.ids.map(id => byId.get(id)).filter(Boolean);
-      const kept = items.filter(i => i.keep);
-      dropped.push(...items.filter(i => !i.keep));
-      if (!kept.length) continue;
-      out.push('', `## ${g.name.trim() || '이름 없는 그룹'}`);
-      if (g.summary) out.push(g.summary);
-      for (const i of kept) out.push(`- ${i.text}`);
-    }
-    if (state.includeOff && dropped.length) {
-      out.push('', '## 제외한 아이디어', '검토했지만 채택하지 않은 것들입니다. 결과에 반영하지 마세요.');
-      for (const i of dropped) out.push(`- ${i.text}`);
-    }
-    const req = requestText();
-    if (req) out.push('', '## 요청', req);
-    return out.join('\n');
-  }
-
-  function renderOutput() {
-    const byId = ideaMap();
-    const kept = state.ideas.filter(i => i.keep).length;
-    const used = state.groups.filter(g => g.ids.some(id => byId.get(id) && byId.get(id).keep)).length;
-    if (state.prompt == null) state.prompt = buildPrompt();
-    const ta = h('textarea', { id: 'promptText', class: 'prompt-bubble', rows: 8, spellcheck: 'false', 'aria-label': '완성된 프롬프트' });
-    ta.value = state.prompt;
-    els.output.replaceChildren(
-      h('div', { class: 'intro' },
-        botRow(`아이디어 ${kept}개를 ${used}개 그룹으로 정리했어요.`),
-        botRow('복사해서 AI 채팅창에 붙여넣으면 돼요.', true)),
-      h('div', { class: 'opts indent' },
-        h('p', { class: 'opts-label', id: 'reqLabel' }, '끝에 붙일 요청'),
-        h('div', { class: 'chips', role: 'radiogroup', 'aria-labelledby': 'reqLabel' },
-          REQUESTS.map(r => h('button', { type: 'button', class: 'chip', role: 'radio', 'aria-checked': String(state.request === r.id), 'data-req': r.id }, r.label))),
-        h('input', { class: 'custom-req', id: 'customReq', type: 'text', maxlength: 300, value: state.customRequest, hidden: state.request !== 'custom', placeholder: '예: 이 내용으로 3분 발표 대본을 써 주세요', 'aria-label': '직접 쓴 요청' }),
-        h('label', { class: 'switch' },
-          h('input', { type: 'checkbox', id: 'includeOff', checked: state.includeOff }),
-          h('span', null, '뺀 아이디어도 ‘제외 목록’으로 넣기'))),
-      h('div', { class: 'sent' }, ta, h('p', { class: 'receipt', id: 'receipt', hidden: true }, '복사됨')));
-    requestAnimationFrame(fitPrompt);
-  }
-
-  function fitPrompt() {
-    const ta = $('promptText');
-    if (!ta || els.output.hidden) return;
-    ta.style.height = 'auto';
-    ta.style.height = ta.scrollHeight + 'px';
-  }
-
-  function refreshPrompt() {
-    state.prompt = buildPrompt();
-    const ta = $('promptText');
-    if (ta) { ta.value = state.prompt; fitPrompt(); }
-    const r = $('receipt');
-    if (r) r.hidden = true;
-    renderDock();
-    save();
-  }
-
-  els.output.addEventListener('click', e => {
-    const chip = e.target.closest('[data-req]');
-    if (!chip) return;
-    state.request = chip.dataset.req;
-    for (const c of els.output.querySelectorAll('[data-req]')) c.setAttribute('aria-checked', String(c === chip));
-    const ci = $('customReq');
-    ci.hidden = state.request !== 'custom';
-    if (!ci.hidden) ci.focus();
-    refreshPrompt();
-  });
-  els.output.addEventListener('input', e => {
-    if (e.target.id === 'promptText') { state.prompt = e.target.value; fitPrompt(); renderDock(); save(); }
-    else if (e.target.id === 'customReq') { state.customRequest = e.target.value; refreshPrompt(); }
-  });
-  els.output.addEventListener('change', e => {
-    if (e.target.id === 'includeOff') { state.includeOff = e.target.checked; refreshPrompt(); }
-  });
-
-  let copyTimer = 0;
-  els.copyBtn.addEventListener('click', () => {
-    const ta = $('promptText');
-    const text = ta ? ta.value : state.prompt || '';
-    let job;
-    try { job = navigator.clipboard.writeText(text); } catch (err) { job = Promise.reject(err); }
-    job.then(
-      () => {
-        showReceipt('복사됨');
-        els.copyBtn.textContent = '복사됨';
-        clearTimeout(copyTimer);
-        copyTimer = setTimeout(() => { els.copyBtn.textContent = '복사하기'; }, 1800);
-      },
-      () => {
-        if (ta) { ta.focus(); ta.select(); }
-        showReceipt('전체 선택했어요. ⌘C 또는 Ctrl+C로 복사하세요.');
-      });
-  });
-
-  function showReceipt(msg) {
-    const r = $('receipt');
-    if (r) { r.textContent = msg; r.hidden = false; }
-    announce(msg);
-  }
-
-  // ---------- composer & chrome events ----------
+  // ---------- events ----------
   function send() {
     const v = els.ideaInput.value;
-    if (!v.trim() || state.phase !== 'stage') return;
+    if (!v.trim() || state.phase === 'classifying') return;
     addIdea(v);
     els.ideaInput.value = '';
-    renderDock();
+    els.sendBtn.disabled = true;
     els.ideaInput.focus();
   }
 
-  els.ideaInput.addEventListener('input', renderDock);
+  els.ideaInput.addEventListener('input', () => {
+    els.sendBtn.disabled = state.phase === 'classifying' || !els.ideaInput.value.trim();
+  });
   els.ideaInput.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
     e.preventDefault();
@@ -1680,13 +1350,45 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
 
   els.topic.addEventListener('input', () => {
     state.topic = els.topic.value;
-    if (state.phase === 'output') refreshPrompt();
-    if (state.phase === 'stage') renderChrome();
+    renderChrome();
     save();
   });
   els.topic.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229 && state.phase === 'stage') { e.preventDefault(); els.ideaInput.focus(); }
+    if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); els.ideaInput.focus(); }
   });
+
+  els.navLeft.addEventListener('click', onNav);
+  els.navRight.addEventListener('click', onNav);
+
+  els.tapback.addEventListener('click', e => {
+    const btn = e.target.closest('button');
+    if (!btn || !tapbackFor) return;
+    const id = tapbackFor.id;
+    const idea = state.ideas.find(i => i.id === id);
+    if (!idea) return;
+    if (btn.dataset.act === 'toggle') {
+      closeTapback();
+      idea.keep = !idea.keep;
+      paintKeep();
+      if (state.phase === 'grouped') layoutBoard();
+      renderChrome();
+      save();
+      announce(idea.keep ? '다시 넣었어요.' : '빼 두었어요.');
+    } else if (btn.dataset.act === 'delete') {
+      removeIdea(id);
+      announce('지웠어요.');
+    } else if (btn.dataset.act === 'edit') {
+      removeIdea(id);
+      els.ideaInput.value = idea.text;
+      els.sendBtn.disabled = false;
+      els.ideaInput.focus();
+      els.ideaInput.select();
+    }
+  });
+  document.addEventListener('pointerdown', e => {
+    if (tapbackFor && !e.target.closest('#tapback') && !e.target.closest('.float')) closeTapback();
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTapback(); });
 
   els.keyBtn.addEventListener('click', () => openKeySheet());
   els.keyForm.addEventListener('submit', async e => {
@@ -1712,47 +1414,29 @@ button, input, textarea { font: inherit; color: inherit; letter-spacing: inherit
   els.keySheet.addEventListener('click', e => { if (e.target === els.keySheet) closeKeySheet(false); });
   els.keySheet.addEventListener('cancel', () => { sheetThen = null; });
 
-  els.navLeft.addEventListener('click', onNav);
-  els.navRight.addEventListener('click', onNav);
-  els.toOutputBtn.addEventListener('click', () => { state.prompt = null; setPhase('output'); });
-
-  els.tapback.addEventListener('click', e => {
-    const btn = e.target.closest('button');
-    if (!btn || !tapbackFor) return;
-    const id = tapbackFor.id;
-    const idea = state.ideas.find(i => i.id === id);
-    if (btn.dataset.act === 'delete') {
-      removeIdea(id);
-      announce('지웠어요.');
-    } else if (btn.dataset.act === 'edit' && idea) {
-      removeIdea(id);
-      els.ideaInput.value = idea.text;
-      renderDock();
-      els.ideaInput.focus();
-      els.ideaInput.select();
-    }
-  });
-  document.addEventListener('pointerdown', e => {
-    if (tapbackFor && !e.target.closest('#tapback') && !e.target.closest('.float')) closeTapback();
-  });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTapback(); });
-
   let resizeFrame = 0;
+  function relayout() {
+    refreshBounds();
+    if (state.phase === 'grouped') { layoutBoard(); return; }
+    fitScale();
+    for (const p of bodies.values()) clampToBounds(p);
+  }
   new ResizeObserver(() => {
     cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(() => {
-      if (!els.stage.hidden) {
-        refreshBounds();
-        fitScale();
-        for (const p of bodies.values()) clampToBounds(p);
-      }
-      fitPrompt();
-    });
-  }).observe(els.card);
+    resizeFrame = requestAnimationFrame(relayout);
+  }).observe(els.stage);
 
   // ---------- boot ----------
   load();
   els.topic.value = state.topic;
-  setPhase(state.phase);
+  els.stage.classList.toggle('is-grouped', state.phase === 'grouped');
+  renderHead();
+  syncBodies();
+  if (state.phase === 'grouped') layoutBoard();
+  renderBodies(performance.now());
+  renderChrome();
+  lastT = performance.now();
+  requestAnimationFrame(tick);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayout);
 })();
 </script>
