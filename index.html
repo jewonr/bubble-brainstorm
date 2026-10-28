@@ -40,7 +40,9 @@
   --lift: rgba(30, 40, 60, 0.18);
   --focus: rgba(25, 115, 221, 0.45);
   --faded-ink: #0B4A92;
-  --font: 'SUIT-600', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  /* Korean faces only, so Latin always comes from the same face as Hangul; a Latin system font here
+     (-apple-system) would set English in SF while Korean fell back to Apple SD Gothic Neo. */
+  --font: 'SUIT-600', 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
   --msg: 22px;
   --group-scale: 0.74;
   --pill-h: 70px;
